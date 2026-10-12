@@ -79,6 +79,7 @@ final class Updater {
 	 * @param mixed $locales     Langues installées.
 	 * @return mixed
 	 */
+	// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- signature imposée par le filtre update_plugins_{hôte} (4 arguments).
 	public function filter_update( $update, $plugin_data, $plugin_file, $locales ) {
 		try {
 			$slug = is_string( $plugin_file ) ? ( $this->basenames[ $plugin_file ] ?? null ) : null;
@@ -184,7 +185,7 @@ final class Updater {
 				return new \WP_Error( 'wawp_token_unavailable', __( 'Mise à jour WeAre[WP] indisponible : licence refusée ou serveur injoignable.', 'wawp-updater' ) );
 			}
 			$file = download_url( $offers[ $slug ]['package'], Config::DOWNLOAD_TIMEOUT );
-			if ( is_wp_error( $file ) || ! is_string( $file ) ) {
+			if ( is_wp_error( $file ) ) {
 				return new \WP_Error( 'wawp_download_failed', __( 'Téléchargement du paquet WeAre[WP] impossible.', 'wawp-updater' ) );
 			}
 			if ( ! Signature::verify_file( $file, $offers[ $slug ]['signature'], $this->public_keys ) ) {
@@ -216,8 +217,8 @@ final class Updater {
 	 * Vide le cache quand l'administrateur clique « Rechercher les mises à jour ».
 	 */
 	public function maybe_flush_on_force_check(): void {
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- lecture seule : vide uniquement un cache local.
 		try {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- lecture seule : isset() sans lire la valeur, vide uniquement un cache local.
 			if ( isset( $_GET['force-check'] ) ) {
 				$this->flush_cache();
 			}
@@ -235,7 +236,7 @@ final class Updater {
 				return;
 			}
 			$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-			if ( null === $screen || ! isset( $screen->id ) || ! in_array( $screen->id, array( 'plugins', 'plugins-network' ), true ) ) {
+			if ( null === $screen || ! in_array( $screen->id, array( 'plugins', 'plugins-network' ), true ) ) {
 				return;
 			}
 			printf(

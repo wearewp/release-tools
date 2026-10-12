@@ -26,6 +26,7 @@ final class Validator {
 
 	/**
 	 * @param mixed $value Valeur à tester.
+	 * @phpstan-assert-if-true string $value
 	 */
 	public static function is_key( $value ): bool {
 		return self::matches( self::KEY, $value );
@@ -159,17 +160,19 @@ final class Validator {
 
 	/**
 	 * @param mixed $value Valeur à tester.
+	 * @phpstan-assert-if-true string $value
 	 */
 	private static function is_package_url( $value ): bool {
 		$prefix = Config::ENDPOINT . '/v1/download/';
 
 		return is_string( $value )
 			&& 0 === strpos( $value, $prefix )
-			&& self::matches( self::TOKEN, (string) substr( $value, strlen( $prefix ) ) );
+			&& 1 === preg_match( self::TOKEN, (string) substr( $value, strlen( $prefix ) ) );
 	}
 
 	/**
 	 * @param mixed $value Valeur à tester.
+	 * @phpstan-assert-if-true string $value
 	 */
 	private static function is_signature( $value ): bool {
 		if ( ! is_string( $value ) ) {
@@ -183,6 +186,7 @@ final class Validator {
 	/**
 	 * @param string $pattern Motif.
 	 * @param mixed  $value   Valeur à tester.
+	 * @phpstan-assert-if-true string|null $value
 	 */
 	private static function optional( string $pattern, $value ): bool {
 		return null === $value || self::matches( $pattern, $value );
@@ -191,6 +195,7 @@ final class Validator {
 	/**
 	 * @param string $pattern Motif.
 	 * @param mixed  $value   Valeur à tester.
+	 * @phpstan-assert-if-true string $value
 	 */
 	private static function matches( string $pattern, $value ): bool {
 		return is_string( $value ) && 1 === preg_match( $pattern, $value );
