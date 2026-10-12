@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.zip binary
+*.phar binary
+/tests export-ignore
+/docs export-ignore

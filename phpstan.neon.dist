@@ -1,0 +1,9 @@
+includes:
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+parameters:
+    level: max
+    phpVersion: 70400
+    paths:
+        - wawp-updater
+        - scripts
+        - bin

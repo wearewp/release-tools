@@ -1,0 +1,29 @@
+{
+    "name": "wearewp/release-tools",
+    "description": "Client de mise à jour wawp-updater et outils de publication des plugins WeAre[WP].",
+    "type": "library",
+    "license": "GPL-2.0-or-later",
+    "require-dev": {
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+        "phpcompatibility/phpcompatibility-wp": "^2.1",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^11.5",
+        "szepeviktor/phpstan-wordpress": "^2.0",
+        "wp-coding-standards/wpcs": "^3.1"
+    },
+    "autoload-dev": {
+        "psr-4": { "WAWP\\ReleaseTools\\Tests\\": "tests/" }
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        },
+        "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit",
+        "stan": "phpstan analyse --memory-limit=1G --no-progress",
+        "cs": "phpcs",
+        "e2e": "php tests/e2e/run.php"
+    }
+}
