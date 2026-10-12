@@ -1,0 +1,5 @@
+{
+    "wordpress": { "version": "7.1.3", "sha1": "13eb1d042b1ca39224e44906cd84fe203112210c" },
+    "sqlite": { "version": "3.1.0", "url": "https://downloads.wordpress.org/plugin/sqlite-database-integration.3.1.0.zip", "sha256": "e260e3ada78676f1c0f4e09eb9ebcb9ecce4d4b85f0c6e5a70fb9a93f5b9847f" },
+    "wpcli": { "version": "2.12.0", "sha512": "be928f6b8ca1e8dfb9d2f4b75a13aa4aee0896f8a9a0a1c45cd5d2c98605e6172e6d014dda2e27f88c98befc16c040cbb2bd1bfa121510ea5cdf5f6a30fe8832" }
+}
