@@ -29,7 +29,7 @@ final class Config {
 	 *
 	 * @var list<string>
 	 */
-	const PUBLIC_KEYS = array();
+	const PUBLIC_KEYS = array( 'LHRLyVYY0wTP/uuvzX/VVI0KVdfncIXAnZ/UIPu/xN4=', 'fW/d3eKzXpvuKKeOQEC/RevDVr91YOmgBRXlGVh8e50=' );
 
 	/** Cache de la réponse /v1/check (transient de site). */
 	const CACHE_KEY = 'wawp_updater_check';
