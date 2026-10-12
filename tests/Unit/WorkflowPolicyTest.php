@@ -86,7 +86,23 @@ final class WorkflowPolicyTest extends TestCase
             self::assertStringContainsString($needle, $script);
         }
         self::assertLessThan((int) strpos($script, '$name.sig.part'), (int) strpos($script, '"$name.part"'), 'zip avant signature');
+        self::assertStringContainsString('lftp -c "set cmd:fail-exit true;', $script, 'lftp s\'arrête à la première commande en échec');
         [$code, , $err] = Cli::run(['bash', '-n', 'scripts/upload-ftps.sh']);
         self::assertSame(0, $code, $err);
+    }
+
+    public function testUploadScriptValidatesThePackageNameBeforeLftp(): void
+    {
+        $script = self::file('scripts/upload-ftps.sh');
+        self::assertLessThan((int) strpos($script, 'lftp -c'), (int) strpos($script, 'Nom de paquet invalide'));
+        foreach (['dist/Wawp-Demo-1.4.0.zip', 'dist/wawp-demo-1.4.zip', 'dist/wawp-demo-1.4.0.1.zip', 'dist/wawp demo-1.4.0.zip', 'dist/wawp-demo-1.4.0.zip;rm', 'dist/wawp-demo-123456.0.0.zip', ''] as $zip) {
+            [$code, , $err] = Cli::run(['bash', 'scripts/upload-ftps.sh', $zip]);
+            self::assertSame(1, $code, $zip);
+            self::assertStringContainsString('Nom de paquet invalide', $err, $zip);
+        }
+        // Nom valide : le contrôle suivant (variables, ou paquet absent) prend le relais.
+        [$code, , $err] = Cli::run(['bash', 'scripts/upload-ftps.sh', 'dist/wawp-demo-1.4.0.zip']);
+        self::assertSame(1, $code);
+        self::assertStringNotContainsString('Nom de paquet invalide', $err);
     }
 }
