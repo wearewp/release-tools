@@ -19,8 +19,12 @@ $endpoint = "http://127.0.0.1:$port";
 $slug = 'wawp-test-plugin';
 $basename = "$slug/$slug.php";
 $failures = 0;
+$masks = array();
 
-$check = static function (string $label, bool $ok, string $detail = '') use (&$failures): void {
+$check = static function (string $label, bool $ok, string $detail = '') use (&$failures, &$masks): void {
+    foreach ($masks as $mask) {
+        $detail = str_replace($mask, '[masqué]', $detail);
+    }
     echo ($ok ? 'OK     ' : 'ÉCHEC  ') . $label . ($ok || $detail === '' ? '' : "\n       $detail") . "\n";
     if (!$ok) {
         $failures++;
@@ -127,6 +131,7 @@ file_put_contents("$data/signing.pub", "# active\n$public\n");
 
 require "$data/app/autoload.php";
 $key = \WAWP\UpdateServer\Licence\KeyGenerator::key();
+$masks[] = $key;
 $hasher = new \WAWP\UpdateServer\Licence\KeyHasher(\WAWP\UpdateServer\Secrets::loadHex("$data/secrets/key_pepper"));
 $writeLicences = static function (bool $active) use ($data, $hasher, $key, $slug): void {
     file_put_contents("$data/licences.json", (string) json_encode(['schema' => 1, 'licences' => [[
@@ -135,6 +140,20 @@ $writeLicences = static function (bool $active) use ($data, $hasher, $key, $slug
     ]]], JSON_PRETTY_PRINT));
 };
 $writeLicences(true);
+
+/** @return list<string> Toutes les lignes des journaux d'accès du serveur. */
+$accessLines = static function () use ($data): array {
+    $lines = array();
+    $files = glob("$data/logs/access-*.log") ?: array();
+    sort($files);
+    foreach ($files as $file) {
+        foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: array() as $line) {
+            $lines[] = $line;
+        }
+    }
+
+    return $lines;
+};
 
 // 3. Construction et publication d'une version du plugin de test.
 $makePlugin = static function (string $version, string $target) use ($e2e, $root, $copy, $endpoint, $public): void {
@@ -226,25 +245,45 @@ $check('activation du plugin de test 1.0.0', $code === 0, $out);
 $version = static function () use ($wp, $slug): string {
     return trim($wp('plugin', 'get', $slug, '--field=version')[1]);
 };
+// Renvoie la version proposée ('' si aucune) ou '#erreur' si WP-CLI échoue ou renvoie un JSON sans l'entrée du plugin.
 $updateVersion = static function () use ($wp, $slug): string {
-    [, $out] = $wp('plugin', 'list', "--name=$slug", '--fields=update_version', '--format=json');
-    $list = json_decode($out, true);
+    [$code, $out] = $wp('plugin', 'list', "--name=$slug", '--fields=name,update_version', '--format=json');
+    $list = $code === 0 ? json_decode($out, true) : null;
+    if (!is_array($list) || !isset($list[0]['name'], $list[0]['update_version']) || $list[0]['name'] !== $slug) {
+        return '#erreur';
+    }
 
-    return is_array($list) && isset($list[0]['update_version']) ? (string) $list[0]['update_version'] : '';
+    return (string) $list[0]['update_version'];
 };
 $flush = static function () use ($wp): void {
     $wp('eval', 'delete_site_transient( "wawp_updater_check" ); delete_site_transient( "update_plugins" );');
 };
 
 // 5. Serveur PHP intégré pour l'API de mises à jour.
+$probe = @fsockopen('127.0.0.1', $port);
+if ($probe !== false) {
+    fclose($probe);
+    fwrite(STDERR, "Le port $port répond déjà : un autre serveur occupe l'adresse de test.\n");
+    exit(1);
+}
 $server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", '-t', $web, "$web/index.php"], [1 => ['file', "$tmp/server.log", 'a'], 2 => ['file', "$tmp/server.log", 'a']], $pipes);
-for ($i = 0; $i < 50; $i++) {
+$listening = false;
+for ($i = 0; $i < 50 && !$listening; $i++) {
     $socket = @fsockopen('127.0.0.1', $port);
     if ($socket !== false) {
         fclose($socket);
-        break;
+        $listening = true;
+    } else {
+        usleep(100000);
     }
-    usleep(100000);
+}
+if (!$listening) {
+    if (is_resource($server)) {
+        proc_terminate($server);
+        proc_close($server);
+    }
+    fwrite(STDERR, "Le serveur PHP intégré ne répond pas sur le port $port.\n");
+    exit(1);
 }
 
 try {
@@ -254,17 +293,28 @@ try {
     [$code, $out] = $wp('plugin', 'update', $slug);
     $check('mise à jour 1.1.0 installée', $code === 0 && $version() === '1.1.0', $out);
 
-    [, $leak] = $wp('eval', 'global $wpdb; echo (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $wpdb->options WHERE option_value LIKE %s", "%" . WAWP_LICENSE_KEY . "%" ) );');
-    $check('clé absente de la base', trim($leak) === '0', $leak);
+    [$leakCode, $leak] = $wp('eval', 'global $wpdb; echo (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $wpdb->options WHERE option_value LIKE %s", "%" . WAWP_LICENSE_KEY . "%" ) ), "|", (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $wpdb->options WHERE option_name LIKE %s", "%wawp_updater_check%" ) );');
+    $check('clé absente de la base (contrôle positif : cache présent)', $leakCode === 0 && preg_match('/^0\|([1-9]\d*)$/', trim($leak)) === 1, $leak);
 
     // b. Jeton périmé en cache : le téléchargement obtient un jeton frais.
     $check('publication 1.2.0', $publish('1.2.0'));
     $flush();
     $check('mise à jour 1.2.0 proposée', $updateVersion() === '1.2.0');
-    $wp('eval', '$old = get_site_transient( "wawp_updater_check" ); $data = json_decode( $old["body"], true ); foreach ( array_keys( $data["plugins"] ) as $s ) { $data["plugins"][ $s ]["package"] = "' . $endpoint . '/v1/download/perime.jeton"; } $old["body"] = wp_json_encode( $data ); set_site_transient( "wawp_updater_check", $old, 3600 );'
+    [$injectCode, $injectOut] = $wp('eval', '$old = get_site_transient( "wawp_updater_check" ); $data = json_decode( $old["body"], true ); foreach ( array_keys( $data["plugins"] ) as $s ) { $data["plugins"][ $s ]["package"] = "' . $endpoint . '/v1/download/perime.jeton"; } $old["body"] = wp_json_encode( $data ); set_site_transient( "wawp_updater_check", $old, 3600 );'
         . '$t = get_site_transient( "update_plugins" ); $t->response["' . $basename . '"]->package = "' . $endpoint . '/v1/download/perime.jeton"; set_site_transient( "update_plugins", $t );');
+    $check('injection du jeton périmé en cache', $injectCode === 0, $injectOut);
+    [$readCode, $readOut] = $wp('eval', '$t = get_site_transient( "update_plugins" ); $c = get_site_transient( "wawp_updater_check" ); echo ( isset( $t->response["' . $basename . '"] ) && false !== strpos( (string) $t->response["' . $basename . '"]->package, "perime.jeton" ) ) ? "A" : "a", ( is_array( $c ) && false !== strpos( (string) $c["body"], "perime.jeton" ) ) ? "B" : "b";');
+    $check('jeton périmé bien présent dans les deux caches avant mise à jour', $readCode === 0 && trim($readOut) === 'AB', $readOut);
+    $linesBefore = count($accessLines());
     [$code, $out] = $wp('plugin', 'update', $slug);
     $check('mise à jour 1.2.0 avec jeton frais', $code === 0 && $version() === '1.2.0', $out);
+    $newLines = array_slice($accessLines(), $linesBefore);
+    $joined = implode("\n", $newLines);
+    $downloads = array_filter($newLines, static function (string $line): bool {
+        return str_contains($line, '"event":"download"') && str_contains($line, '"version":"1.2.0"');
+    });
+    $check('journal : téléchargement 1.2.0 enregistré', count($downloads) >= 1, $joined);
+    $check('journal : jeton périmé jamais présenté', !str_contains($joined, 'perime.jeton') && !str_contains($joined, 'token_invalid') && !str_contains($joined, 'download_denied'), $joined);
 
     // c. Paquet altéré sur le serveur : signature refusée, plugin intact.
     $check('publication 1.3.0 puis altération', $publish('1.3.0', true));
@@ -276,20 +326,22 @@ try {
     // d. Licence révoquée : plus aucune mise à jour proposée.
     $writeLicences(false);
     $flush();
+    $linesBefore = count($accessLines());
     $check('licence révoquée : aucune mise à jour', $updateVersion() === '');
+    $denied = array_filter(array_slice($accessLines(), $linesBefore), static function (string $line): bool {
+        return str_contains($line, '"event":"check_denied"') && str_contains($line, '"reason":"inactive"');
+    });
+    $check('licence révoquée : refus inactive journalisé', count($denied) >= 1);
     $writeLicences(true);
 
     // e. Clé retirée de wp-config.php : aucune requête vers le serveur.
-    $logs = static function () use ($data): int {
-        $count = 0;
-        foreach (glob("$data/logs/access-*.log") ?: [] as $file) {
-            $count += count(file($file) ?: []);
-        }
-        return $count;
+    $logs = static function () use ($accessLines): int {
+        return count($accessLines());
     };
     $wp('config', 'delete', 'WAWP_LICENSE_KEY');
     $flush();
     $before = $logs();
+    $check("journal d'accès non vide avant le contrôle sans clé", $before > 0);
     $check('sans clé : aucune mise à jour', $updateVersion() === '');
     $check('sans clé : aucune requête au serveur', $logs() === $before);
 } finally {
