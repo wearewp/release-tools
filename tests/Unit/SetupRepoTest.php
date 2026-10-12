@@ -41,6 +41,15 @@ final class SetupRepoTest extends TestCase
         }
     }
 
+    public function testRulesetListIsCapturedBeforeGrep(): void
+    {
+        // Sous pipefail, « gh api | grep -q » peut échouer par SIGPIPE et créer un ruleset en double.
+        $script = self::script();
+        self::assertStringContainsString('rulesets="$(gh api "repos/$repo/rulesets" --jq \'.[].name\')"', $script);
+        self::assertStringContainsString('grep -qx \'Tags de version immuables\' <<< "$rulesets"', $script);
+        self::assertDoesNotMatchRegularExpression('/\|\s*grep -q/', $script);
+    }
+
     public function testRefusesBadArguments(): void
     {
         [$code, , $err] = Cli::run(['bash', self::SCRIPT, 'autre/depot', '.']);

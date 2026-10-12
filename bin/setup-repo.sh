@@ -29,7 +29,8 @@ for secret in SIGNING_KEY FTP_HOST FTP_USER FTP_PASSWORD; do
     echo "Secret $secret accessible à $repo."
 done
 
-if gh api "repos/$repo/rulesets" --jq '.[].name' | grep -qx 'Tags de version immuables'; then
+rulesets="$(gh api "repos/$repo/rulesets" --jq '.[].name')"
+if grep -qx 'Tags de version immuables' <<< "$rulesets"; then
     echo "Ruleset déjà présent."
 else
     gh api -X POST "repos/$repo/rulesets" --input - > /dev/null <<'JSON'
