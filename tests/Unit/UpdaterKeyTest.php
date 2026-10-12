@@ -42,6 +42,11 @@ final class UpdaterKeyTest extends TestCase
         self::assertFalse($updater->filter_update(false, [], 'wawp-demo/wawp-demo.php', []));
         self::assertSame([], WawpTestState::$requests);
 
+        $info = $updater->filter_plugins_api(false, 'plugin_information', (object) ['slug' => 'wawp-demo']);
+        self::assertInstanceOf(\WP_Error::class, $info);
+        self::assertSame('wawp_info_unavailable', $info->get_error_code());
+        self::assertSame([], WawpTestState::$requests);
+
         WawpTestState::$screen = (object) ['id' => 'plugins'];
         ob_start();
         $updater->admin_notice();

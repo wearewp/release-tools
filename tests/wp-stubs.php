@@ -10,6 +10,7 @@ final class WawpTestState
 {
     /** @var array<string, list<callable>> */
     public static array $hooks = [];
+    public static array $priorities = [];
     /** @var array<string, array{value: mixed, ttl: int}> */
     public static array $transients = [];
     /** @var array<string, mixed> */
@@ -29,6 +30,7 @@ final class WawpTestState
     public static function reset(): void
     {
         self::$hooks = [];
+        self::$priorities = [];
         self::$transients = [];
         self::$options = [];
         self::$http = null;
@@ -66,6 +68,7 @@ class WP_Error
 function add_filter(string $hook, callable $callback, int $priority = 10, int $args = 1): bool
 {
     WawpTestState::$hooks[$hook][] = $callback;
+    WawpTestState::$priorities[$hook][] = $priority;
 
     return true;
 }

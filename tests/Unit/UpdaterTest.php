@@ -74,6 +74,7 @@ final class UpdaterTest extends TestCase
         foreach (['update_plugins_updates.wearewp.pro', 'plugins_api', 'upgrader_pre_download', 'upgrader_process_complete', 'load-update-core.php', 'admin_notices', 'admin_init'] as $hook) {
             self::assertArrayHasKey($hook, WawpTestState::$hooks, $hook);
         }
+        self::assertSame([9], WawpTestState::$priorities['load-update-core.php']);
     }
 
     public function testUpdateIsOfferedFromOneCachedRequest(): void
@@ -116,10 +117,19 @@ final class UpdaterTest extends TestCase
         $updater = $this->updater();
         $stale = $updater->filter_update(false, [], self::BASENAME, [])['package'];
 
+        $urls = [];
+        $zip = $this->zip;
+        WawpTestState::$download = static function (string $url) use ($zip, &$urls): string {
+            $urls[] = $url;
+            copy($zip, $zip . '.dl');
+
+            return $zip . '.dl';
+        };
         $path = $updater->filter_pre_download(false, $stale, null, ['plugin' => self::BASENAME]);
 
         self::assertSame($this->zip . '.dl', $path);
         self::assertCount(2, WawpTestState::$requests, 'un /v1/check frais au téléchargement');
+        self::assertSame(['https://updates.wearewp.pro/v1/download/jeton2'], $urls);
     }
 
     public function testPreDownloadRefusesBadSignatureAndDeletesTheFile(): void
@@ -161,6 +171,14 @@ final class UpdaterTest extends TestCase
 
         self::assertSame('inchangé', $this->updater()->filter_plugins_api('inchangé', 'plugin_information', (object) ['slug' => 'akismet']));
         self::assertSame('inchangé', $this->updater()->filter_plugins_api('inchangé', 'query_plugins', $args));
+    }
+
+    public function testPluginsApiNeverDelegatesARegisteredSlugToWordPressOrg(): void
+    {
+        WawpTestState::$http = static fn () => new WP_Error('http_request_failed', 'timeout');
+        $result = $this->updater()->filter_plugins_api(false, 'plugin_information', (object) ['slug' => 'wawp-demo']);
+        self::assertInstanceOf(WP_Error::class, $result);
+        self::assertSame('wawp_info_unavailable', $result->get_error_code());
     }
 
     public function testCacheFlushAndLegacyCleanup(): void

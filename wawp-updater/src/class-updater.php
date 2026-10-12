@@ -64,7 +64,7 @@ final class Updater {
 		add_filter( 'plugins_api', array( $this, 'filter_plugins_api' ), 10, 3 );
 		add_filter( 'upgrader_pre_download', array( $this, 'filter_pre_download' ), 10, 4 );
 		add_action( 'upgrader_process_complete', array( $this, 'flush_cache' ), 10, 0 );
-		add_action( 'load-update-core.php', array( $this, 'maybe_flush_on_force_check' ) );
+		add_action( 'load-update-core.php', array( $this, 'maybe_flush_on_force_check' ), 9 );
 		add_action( 'admin_notices', array( $this, 'admin_notice' ) );
 		add_action( 'network_admin_notices', array( $this, 'admin_notice' ) );
 		add_action( 'admin_init', array( $this, 'cleanup_legacy' ) );
@@ -119,13 +119,14 @@ final class Updater {
 	 * @return mixed
 	 */
 	public function filter_plugins_api( $result, $action, $args ) {
+		$unavailable = new \WP_Error( 'wawp_info_unavailable', __( 'Détails de l\'extension WeAre[WP] indisponibles : licence absente ou serveur injoignable.', 'wawp-updater' ) );
 		try {
 			if ( 'plugin_information' !== $action || ! is_object( $args ) || ! isset( $args->slug ) || ! is_string( $args->slug ) || ! isset( $this->files[ $args->slug ] ) ) {
 				return $result;
 			}
 			$key = $this->key();
 			if ( null === $key ) {
-				return $result;
+				return $unavailable;
 			}
 			$slug      = $args->slug;
 			$cache_key = Config::INFO_CACHE_PREFIX . $slug;
@@ -134,7 +135,7 @@ final class Updater {
 			if ( null === $info ) {
 				$info = $this->client->info( $key, $this->site(), $slug );
 				if ( null === $info ) {
-					return $result;
+					return $unavailable;
 				}
 				set_site_transient( $cache_key, (string) wp_json_encode( $info ), Config::CACHE_TTL );
 			}
@@ -155,7 +156,7 @@ final class Updater {
 				),
 			);
 		} catch ( \Throwable $e ) {
-			return $result;
+			return is_object( $args ) && isset( $args->slug ) && is_string( $args->slug ) && isset( $this->files[ $args->slug ] ) ? $unavailable : $result;
 		}
 	}
 
@@ -201,9 +202,13 @@ final class Updater {
 	 * Vide les caches du client.
 	 */
 	public function flush_cache(): void {
-		delete_site_transient( Config::CACHE_KEY );
-		foreach ( array_keys( $this->files ) as $slug ) {
-			delete_site_transient( Config::INFO_CACHE_PREFIX . $slug );
+		try {
+			delete_site_transient( Config::CACHE_KEY );
+			foreach ( array_keys( $this->files ) as $slug ) {
+				delete_site_transient( Config::INFO_CACHE_PREFIX . $slug );
+			}
+		} catch ( \Throwable $e ) {
+			return;
 		}
 	}
 
@@ -212,8 +217,12 @@ final class Updater {
 	 */
 	public function maybe_flush_on_force_check(): void {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- lecture seule : vide uniquement un cache local.
-		if ( isset( $_GET['force-check'] ) ) {
-			$this->flush_cache();
+		try {
+			if ( isset( $_GET['force-check'] ) ) {
+				$this->flush_cache();
+			}
+		} catch ( \Throwable $e ) {
+			return;
 		}
 	}
 
