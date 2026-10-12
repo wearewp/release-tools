@@ -70,6 +70,69 @@ final class WorkflowPolicyTest extends TestCase
         self::assertStringNotContainsString('actions/checkout@', $jobs['publish-release'], 'aucun clone dans le job qui écrit');
     }
 
+    /** @return array<string, string> étapes d'un job indexées par nom */
+    private static function steps(string $job): array
+    {
+        $parts = preg_split('/^      - name: (.+)\n/m', $job, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [];
+        $steps = [];
+        for ($i = 1; $i + 1 < count($parts); $i += 2) {
+            $steps[$parts[$i]] = $parts[$i + 1];
+        }
+
+        return $steps;
+    }
+
+    public function testBuildChecksThePackageAndTakesTheHighestMinimumUpdaterVersion(): void
+    {
+        $build = self::jobs(self::file('.github/workflows/plugin-release.yml'))['build'];
+        $steps = self::steps($build);
+
+        $main = $steps['Version minimale de wawp-updater exigée sur main'] ?? '';
+        foreach (['uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683', 'repository: wearewp/release-tools', 'ref: main', 'path: tools-main', 'sparse-checkout: config', 'persist-credentials: false'] as $needle) {
+            self::assertStringContainsString($needle, $main, $needle);
+        }
+        $checks = $steps['Contrôles avant publication'] ?? '';
+        self::assertStringContainsString('tools/config/min-updater-version.txt', $checks);
+        self::assertStringContainsString('tools-main/config/min-updater-version.txt', $checks);
+        self::assertStringContainsString('sort -V | tail -n 1', $checks);
+        self::assertStringContainsString('"$min"', $checks);
+
+        $package = $steps['Paquet'] ?? '';
+        $rsync = (int) strpos($package, 'rsync ');
+        $check = (int) strpos($package, 'php tools/scripts/check-package.php "build/$SLUG" "$SLUG" "$VERSION"');
+        $zip = (int) strpos($package, 'zip -rqX');
+        self::assertGreaterThan(0, $check, 'contrôle du paquet construit');
+        self::assertLessThan($check, $rsync);
+        self::assertLessThan($zip, $check);
+    }
+
+    public function testLftpIsInstalledInAStepWithoutSecrets(): void
+    {
+        $sign = self::jobs(self::file('.github/workflows/plugin-release.yml'))['sign-upload'];
+        $steps = self::steps($sign);
+        self::assertArrayHasKey('Installation de lftp', $steps);
+        self::assertStringNotContainsString('env:', $steps['Installation de lftp']);
+        self::assertStringContainsString('apt-get install', $steps['Installation de lftp']);
+        $names = array_keys($steps);
+        self::assertLessThan(array_search('Signature', $names, true), array_search('Installation de lftp', $names, true));
+        foreach ($steps as $name => $step) {
+            if (str_contains($step, 'secrets.')) {
+                self::assertStringNotContainsString('apt-get', $step, $name);
+            }
+        }
+    }
+
+    public function testArtifactsAreOverwrittenAndReleaseAssetsNeverClobbered(): void
+    {
+        $yaml = self::file('.github/workflows/plugin-release.yml');
+        self::assertSame(substr_count($yaml, 'actions/upload-artifact@'), substr_count($yaml, 'overwrite: true'));
+        self::assertSame(2, substr_count($yaml, 'overwrite: true'));
+        self::assertStringNotContainsString('--clobber', $yaml);
+        $release = self::steps(self::jobs($yaml)['publish-release'])['Release'] ?? '';
+        self::assertStringContainsString('--json assets', $release);
+        self::assertStringContainsString('contient déjà', $release);
+    }
+
     public function testCallerTemplate(): void
     {
         $yaml = self::file('templates/release.yml');

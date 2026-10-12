@@ -35,6 +35,14 @@ $header = static function (string $content, string $name): ?string {
     return $value === '' ? null : $value;
 };
 
+if ($dir === '' || !is_dir($dir)) {
+    fwrite(STDERR, "Dossier du plugin introuvable : « $dir ».\n");
+    exit(1);
+}
+if (preg_match('/^\d+\.\d+\.\d+\z/', $minUpdater) !== 1) {
+    fwrite(STDERR, "Version minimale de wawp-updater invalide : « $minUpdater » (format attendu X.Y.Z, config/min-updater-version.txt).\n");
+    exit(1);
+}
 if (preg_match('/^[a-z0-9-]{1,64}\z/', $slug) !== 1) {
     $errors[] = "Slug invalide : « $slug » (le nom du dépôt doit être le slug du plugin, en minuscules).";
 }

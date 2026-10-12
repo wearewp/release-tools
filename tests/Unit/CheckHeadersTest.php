@@ -47,6 +47,18 @@ final class CheckHeadersTest extends TestCase
         return [$code, $out . $err];
     }
 
+    public function testMalformedMinimumUpdaterVersionOrEmptyDirectoryIsRefused(): void
+    {
+        foreach (['', '1.0', 'v1.0.0', '1.0.0-beta', "1.0.0\n2.0.0"] as $min) {
+            [$code, $out] = $this->check('wawp-demo', 'v1.4.0', $min);
+            self::assertSame(1, $code, var_export($min, true));
+            self::assertStringContainsString('Version minimale de wawp-updater invalide', $out, var_export($min, true));
+        }
+        [$code, $out, $err] = Cli::run([PHP_BINARY, Cli::php('scripts/check-headers.php'), '', 'wawp-demo', 'v1.4.0', '1.0.0']);
+        self::assertSame(1, $code);
+        self::assertStringContainsString('Dossier du plugin', $out . $err);
+    }
+
     public function testValidPluginPasses(): void
     {
         [$code, $out] = $this->check();

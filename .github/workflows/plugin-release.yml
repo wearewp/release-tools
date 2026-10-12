@@ -37,6 +37,16 @@ jobs:
           path: tools
           persist-credentials: false
 
+      # Un relèvement de la version minimale sur main s'applique même aux appels épinglés sur un ancien tag.
+      - name: Version minimale de wawp-updater exigée sur main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: wearewp/release-tools
+          ref: main
+          path: tools-main
+          sparse-checkout: config
+          persist-credentials: false
+
       - name: Slug et version
         id: meta
         run: |
@@ -46,7 +56,11 @@ jobs:
       - name: Contrôles avant publication
         env:
           SLUG: ${{ steps.meta.outputs.slug }}
-        run: php tools/scripts/check-headers.php plugin "$SLUG" "$GITHUB_REF_NAME" "$(cat tools/config/min-updater-version.txt)"
+        run: |
+          ref_min="$(cat tools/config/min-updater-version.txt)"
+          main_min="$(cat tools-main/config/min-updater-version.txt)"
+          min="$(printf '%s\n%s\n' "$ref_min" "$main_min" | sort -V | tail -n 1)"
+          php tools/scripts/check-headers.php plugin "$SLUG" "$GITHUB_REF_NAME" "$min"
 
       - name: Syntaxe PHP
         run: find plugin -name '*.php' -not -path '*/node_modules/*' -print0 | xargs -0 -n1 php -l > /dev/null
@@ -68,6 +82,7 @@ jobs:
         run: |
           mkdir -p "build/$SLUG" dist
           rsync -a --exclude-from=plugin/.distignore --exclude=.git --exclude=.github plugin/ "build/$SLUG/"
+          php tools/scripts/check-package.php "build/$SLUG" "$SLUG" "$VERSION"
           (cd build && zip -rqX "../dist/$SLUG-$VERSION.zip" "$SLUG")
 
       - name: Conservation du paquet
@@ -77,6 +92,7 @@ jobs:
           path: dist/
           retention-days: 1
           if-no-files-found: error
+          overwrite: true
 
   sign-upload:
     name: Signature et envoi
@@ -103,6 +119,11 @@ jobs:
           name: paquet
           path: dist
 
+      - name: Installation de lftp
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lftp > /dev/null
+
       - name: Signature
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
@@ -115,10 +136,7 @@ jobs:
           FTP_USER: ${{ secrets.FTP_USER }}
           LFTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
           ZIP: dist/${{ needs.build.outputs.slug }}-${{ needs.build.outputs.version }}.zip
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq lftp > /dev/null
-          bash tools/scripts/upload-ftps.sh "$ZIP"
+        run: bash tools/scripts/upload-ftps.sh "$ZIP"
 
       - name: Conservation de la signature
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -127,6 +145,7 @@ jobs:
           path: dist/*.sig
           retention-days: 1
           if-no-files-found: error
+          overwrite: true
 
   publish-release:
     name: Archive dans la Release GitHub
@@ -153,7 +172,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            assets="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+            for file in dist/*; do
+              while IFS= read -r asset; do
+                if [ "$asset" = "$(basename "$file")" ]; then
+                  echo "La Release $GITHUB_REF_NAME contient déjà $asset : aucun remplacement automatique. Vérifier l'asset existant et le supprimer à la main s'il doit être remplacé, puis relancer le job." >&2
+                  exit 1
+                fi
+              done <<< "$assets"
+            done
+            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes "Paquet signé publié sur updates.wearewp.pro."
           fi
