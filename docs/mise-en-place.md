@@ -31,7 +31,7 @@ gh secret set FTP_PASSWORD --org wearewp --visibility selected --repos wawp-test
 
 Les secrets d'organisation doivent impérativement être créés avec `--visibility selected` : sinon `bin/setup-repo.sh` ne peut pas y ajouter de dépôts.
 
-`FTP_HOST`, `FTP_USER`, `FTP_PASSWORD` : le compte FTP dédié créé dans cPanel, limité à `updates-data/incoming`. Les autres dépôts de plugins sont ajoutés ensuite par `bin/setup-repo.sh` (étape 6), sans jamais retaper les valeurs.
+`FTP_HOST`, `FTP_USER`, `FTP_PASSWORD` : le compte FTP dédié créé dans cPanel, limité à `updates-data/incoming`. `FTP_HOST` doit être le nom d'hôte couvert par le certificat FTPS d'o2switch (celui du serveur mutualisé, affiché dans cPanel), et non `updates.wearewp.pro` ni une adresse IP : l'envoi vérifie le certificat et échoue sinon. Les autres dépôts de plugins sont ajoutés ensuite par `bin/setup-repo.sh` (étape 6), sans jamais retaper les valeurs.
 
 ## 3. Serveur o2switch
 
@@ -45,7 +45,7 @@ Placer la ligne `const PUBLIC_KEYS = array( '…', '…' );` affichée par `keyg
 
 ## 5. Ruleset des tags de release-tools
 
-Le tag `v1` est la référence utilisée par tous les plugins. Les commandes de cette section et de la suivante s'exécutent dans Git Bash, avec `gh` authentifié par un compte propriétaire de l'organisation `wearewp` (vérifier avec `gh auth status`).
+Le tag `v1` est la référence utilisée par tous les plugins. La politique Actions de l'organisation (Settings > Actions > General) doit autoriser les workflows réutilisables de `wearewp/*`, sinon l'appel depuis les dépôts de plugins est refusé. Les commandes de cette section et de la suivante s'exécutent dans Git Bash, avec `gh` authentifié par un compte propriétaire de l'organisation `wearewp` (vérifier avec `gh auth status`).
 
 D'abord protéger les tags :
 
@@ -88,11 +88,15 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-Le workflow contrôle, construit, signe, envoie sur o2switch et archive le paquet dans la Release GitHub. Le cron d'ingestion le publie dans les 5 minutes ; les sites le voient à leur prochaine vérification (12 h au plus, ou « Rechercher les mises à jour »).
+Le workflow contrôle, construit, signe, envoie sur o2switch et archive le paquet dans la Release GitHub. Le cron d'ingestion le publie dans les 5 minutes ; sans action de l'administrateur, un site peut mettre jusqu'à environ 24 h à la voir (cache de WordPress de 12 h, puis cache du client de 12 h) ; « Tableau de bord > Mises à jour > Rechercher les mises à jour » vide les deux caches et la fait apparaître aussitôt.
+
+Si plusieurs tags sont poussés coup sur coup, la règle de concurrence du job d'envoi peut annuler un run en attente (seul le plus récent attend son tour). Vérifier l'onglet Actions : relancer le run annulé (« Re-run jobs ») ou repousser le tag concerné.
 
 ## 8. Rotation de la clé de signature (fuite de la clé active)
 
 Suivre la section 11 de la spec (`docs/superpowers/specs/2026-10-12-serveur-mises-a-jour-design.md` dans le dépôt updates-server) : passer `SIGNING_KEY` sur la clé de secours avec `gh secret set SIGNING_KEY --org wearewp --visibility selected --repos <liste>` (attention : `--repos` remplace la liste existante, y inclure tous les dépôts de plugins), générer une nouvelle paire de secours, publier une version de `wawp-updater` dont `PUBLIC_KEYS` vaut `array( ancienne clé de secours, nouvelle clé de secours )`, l'intégrer dans tous les plugins et les publier, puis retirer l'ancienne clé publique de `signing.pub`.
+
+La version de rotation de `wawp-updater` incrémente `$wawp_updater_version` dans `load.php` et `Config::VERSION` dans `src/class-config.php`, toujours égales (par exemple `1.0.0` vers `1.1.0`) : c'est la copie la plus récente qui est chargée sur un site. Une fois cette version taguée, relever `config/min-updater-version.txt` sur la branche `main` de release-tools à cette même version : chaque publication lit aussi ce fichier sur `main` et retient la plus haute des deux valeurs, ce qui bloque la publication d'un plugin qui embarque encore l'ancien client, même si son workflow est épinglé sur un ancien tag.
 
 ## Limite connue
 
