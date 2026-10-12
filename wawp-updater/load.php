@@ -71,19 +71,24 @@ if ( ! function_exists( __NAMESPACE__ . '\register' ) ) {
 			$registry['booted']               = true;
 			$GLOBALS['wawp_updater_registry'] = $registry;
 
+			// Version la plus haute d'abord ; une copie dont bootstrap.php est illisible (quarantaine antivirus) est sautée.
 			$versions = array_map( 'strval', array_keys( $copies ) );
 			usort( $versions, 'version_compare' );
-			$latest = end( $versions );
-			if ( ! isset( $copies[ $latest ] ) || ! is_string( $copies[ $latest ] ) ) {
+			foreach ( array_reverse( $versions ) as $version ) {
+				$dir = $copies[ $version ] ?? null;
+				if ( ! is_string( $dir ) || ! is_readable( $dir . '/bootstrap.php' ) ) {
+					continue;
+				}
+				$start = require $dir . '/bootstrap.php';
+				if ( is_callable( $start ) ) {
+					$start( array_map( 'strval', array_keys( $plugins ) ) );
+				}
 				return;
-			}
-
-			$start = require $copies[ $latest ] . '/bootstrap.php';
-			if ( is_callable( $start ) ) {
-				$start( array_map( 'strval', array_keys( $plugins ) ) );
 			}
 		} catch ( \Throwable $e ) {
 			return;
 		}
 	}
 }
+
+unset( $wawp_updater_version, $wawp_updater_copies );

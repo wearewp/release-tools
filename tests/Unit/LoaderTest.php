@@ -43,6 +43,12 @@ final class LoaderTest extends TestCase
         }
         $code .= 'foreach ($GLOBALS["h"]["plugins_loaded"] as $c) { $c(); }'
             . 'echo "|" . count($GLOBALS["h"]["plugins_loaded"]);';
+
+        return self::subprocess($code);
+    }
+
+    private static function subprocess(string $code): string
+    {
         $process = proc_open([PHP_BINARY, '-r', $code], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
         self::assertIsResource($process);
         $out = (string) stream_get_contents($pipes[1]) . (string) stream_get_contents($pipes[2]);
@@ -57,6 +63,32 @@ final class LoaderTest extends TestCase
     {
         self::assertSame('1.2.0:/plugins/p0/p0.php,/plugins/p1/p1.php|1', $this->load(['ancien', 'recent']));
         self::assertSame('1.2.0:/plugins/p0/p0.php,/plugins/p1/p1.php|1', $this->load(['recent', 'ancien']));
+    }
+
+    public function testNewestCopyWithoutBootstrapFallsBackToTheNextOne(): void
+    {
+        unlink("{$this->dir}/recent/bootstrap.php");
+        self::assertSame('1.0.0:/plugins/p0/p0.php,/plugins/p1/p1.php|1', $this->load(['ancien', 'recent']));
+        self::assertSame('1.0.0:/plugins/p0/p0.php,/plugins/p1/p1.php|1', $this->load(['recent', 'ancien']));
+    }
+
+    public function testNoReadableCopyBootsNothingWithoutError(): void
+    {
+        unlink("{$this->dir}/recent/bootstrap.php");
+        unlink("{$this->dir}/ancien/bootstrap.php");
+        self::assertSame('|1', $this->load(['ancien', 'recent']));
+    }
+
+    public function testLoaderLeavesOnlyTheRegistryInGlobalScope(): void
+    {
+        $out = self::subprocess(
+            'define("ABSPATH", "/");'
+            . 'function add_action($n, $c, $p = 10) {}'
+            . 'require ' . var_export("{$this->dir}/recent/load.php", true) . ';'
+            . 'echo isset($wawp_updater_version) ? "version " : "", isset($wawp_updater_copies) ? "copies " : "",'
+            . ' isset($GLOBALS["wawp_updater_registry"]["copies"]["1.2.0"]) ? "registre" : "";'
+        );
+        self::assertSame('registre', $out);
     }
 
     public function testVersionConstantMatchesLoader(): void
