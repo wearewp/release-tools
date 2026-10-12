@@ -185,11 +185,11 @@ final class Updater {
 		if ( ! is_string( $package ) || 0 !== strpos( $package, Config::ENDPOINT . '/v1/download/' ) ) {
 			return $reply;
 		}
-		if ( false !== $reply ) {
-			// Enregistré en priorité 1 : un autre filtre qui a déjà fourni un fichier court-circuiterait la signature.
-			return new \WP_Error( 'wawp_package_hijacked', __( 'Paquet WeAre[WP] déjà pris en charge par une autre extension : mise à jour annulée.', 'wawp-updater' ) );
-		}
 		try {
+			if ( false !== $reply ) {
+				// Enregistré en priorité 1 : un autre filtre qui a déjà fourni un fichier court-circuiterait la signature.
+				return new \WP_Error( 'wawp_package_hijacked', __( 'Paquet WeAre[WP] déjà pris en charge par une autre extension : mise à jour annulée.', 'wawp-updater' ) );
+			}
 			$plugin = is_array( $hook_extra ) && isset( $hook_extra['plugin'] ) && is_string( $hook_extra['plugin'] ) ? $hook_extra['plugin'] : '';
 			$slug   = $this->basenames[ $plugin ] ?? null;
 			if ( null === $slug ) {
