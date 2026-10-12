@@ -7,3 +7,5 @@ parameters:
         - wawp-updater
         - scripts
         - bin
+    bootstrapFiles:
+        - tests/phpstan/pclzip.php
