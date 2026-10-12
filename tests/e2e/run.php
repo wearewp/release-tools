@@ -296,6 +296,11 @@ try {
     [$leakCode, $leak] = $wp('eval', 'global $wpdb; echo (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $wpdb->options WHERE option_value LIKE %s", "%" . WAWP_LICENSE_KEY . "%" ) ), "|", (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $wpdb->options WHERE option_name LIKE %s", "%wawp_updater_check%" ) );');
     $check('clé absente de la base (contrôle positif : cache présent)', $leakCode === 0 && preg_match('/^0\|([1-9]\d*)$/', trim($leak)) === 1, $leak);
 
+    // Plugin à jour : entrée no_update (bascule des mises à jour automatiques), aucune offre.
+    $flush();
+    [$noUpdateCode, $noUpdate] = $wp('eval', 'wp_update_plugins(); $t = get_site_transient( "update_plugins" ); echo isset( $t->response["' . $basename . '"] ) ? "offre" : "", isset( $t->no_update["' . $basename . '"] ) ? $t->no_update["' . $basename . '"]->new_version . "|" . $t->no_update["' . $basename . '"]->package : "absent";');
+    $check('plugin à jour rangé dans no_update', $noUpdateCode === 0 && trim($noUpdate) === '1.1.0|', $noUpdate);
+
     // b. Jeton périmé en cache : le téléchargement obtient un jeton frais.
     $check('publication 1.2.0', $publish('1.2.0'));
     $flush();
