@@ -62,7 +62,7 @@ final class Updater {
 	public function hooks(): void {
 		add_filter( 'update_plugins_' . Config::HOST, array( $this, 'filter_update' ), 10, 4 );
 		add_filter( 'plugins_api', array( $this, 'filter_plugins_api' ), 10, 3 );
-		add_filter( 'upgrader_pre_download', array( $this, 'filter_pre_download' ), 10, 4 );
+		add_filter( 'upgrader_pre_download', array( $this, 'filter_pre_download' ), 1, 4 );
 		add_action( 'upgrader_process_complete', array( $this, 'flush_cache' ), 10, 0 );
 		add_action( 'load-update-core.php', array( $this, 'maybe_flush_on_force_check' ), 9 );
 		add_action( 'admin_notices', array( $this, 'admin_notice' ) );
@@ -88,7 +88,18 @@ final class Updater {
 			}
 			$offers = $this->offers( false );
 			if ( ! isset( $offers[ $slug ] ) ) {
-				return $update;
+				$installed = $this->installed();
+				if ( null === $this->key() || ! isset( $installed[ $slug ] ) ) {
+					return $update;
+				}
+
+				// Plugin à jour : WordPress le range dans no_update (bascule des mises à jour automatiques).
+				return array(
+					'slug'    => $slug,
+					'version' => $installed[ $slug ],
+					'url'     => Config::ENDPOINT,
+					'package' => '',
+				);
 			}
 			$offer = $offers[ $slug ];
 
@@ -171,8 +182,12 @@ final class Updater {
 	 * @return mixed Chemin du fichier vérifié, WP_Error, ou la valeur reçue.
 	 */
 	public function filter_pre_download( $reply, $package, $upgrader, $hook_extra ) {
-		if ( false !== $reply || ! is_string( $package ) || 0 !== strpos( $package, Config::ENDPOINT . '/v1/download/' ) ) {
+		if ( ! is_string( $package ) || 0 !== strpos( $package, Config::ENDPOINT . '/v1/download/' ) ) {
 			return $reply;
+		}
+		if ( false !== $reply ) {
+			// Enregistré en priorité 1 : un autre filtre qui a déjà fourni un fichier court-circuiterait la signature.
+			return new \WP_Error( 'wawp_package_hijacked', __( 'Paquet WeAre[WP] déjà pris en charge par une autre extension : mise à jour annulée.', 'wawp-updater' ) );
 		}
 		try {
 			$plugin = is_array( $hook_extra ) && isset( $hook_extra['plugin'] ) && is_string( $hook_extra['plugin'] ) ? $hook_extra['plugin'] : '';
@@ -191,6 +206,13 @@ final class Updater {
 			if ( ! Signature::verify_file( $file, $offers[ $slug ]['signature'], $this->public_keys ) ) {
 				wp_delete_file( $file );
 				return new \WP_Error( 'wawp_signature_invalid', __( 'Signature du paquet WeAre[WP] invalide : mise à jour annulée.', 'wawp-updater' ) );
+			}
+			// Paquet signé mais différent de l'offre (retour arrière ou substitution par un serveur compromis).
+			$version   = $offers[ $slug ]['version'];
+			$installed = $this->installed();
+			if ( ! isset( $installed[ $slug ] ) || ! version_compare( $version, $installed[ $slug ], '>' ) || ! Package::matches( $file, $slug, $version ) ) {
+				wp_delete_file( $file );
+				return new \WP_Error( 'wawp_package_mismatch', __( 'Paquet WeAre[WP] non conforme à la mise à jour proposée : mise à jour annulée.', 'wawp-updater' ) );
 			}
 
 			return $file;

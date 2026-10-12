@@ -32,25 +32,34 @@ final class UpdaterTest extends TestCase
         WawpTestState::$versions[self::FILE] = '1.3.0';
         $this->pair = Keys::pair();
         $this->zip = sys_get_temp_dir() . '/wawp-upd-' . bin2hex(random_bytes(4)) . '.zip';
-        file_put_contents($this->zip, random_bytes(1024));
-        $signature = Keys::sign_file($this->zip, $this->pair['secret']);
-        WawpTestState::$http = function (string $method) use ($signature): array {
-            $this->token++;
-
-            return $method === 'POST'
-                ? Http::response(200, Http::offer_body(['wawp-demo' => Http::offer('1.4.0', $signature, 'jeton' . $this->token)]))
-                : Http::response(200, (string) json_encode([
-                    'name' => '<b>WAWP Démo</b>', 'slug' => 'wawp-demo', 'version' => '1.4.0', 'requires' => '6.4',
-                    'tested' => '6.8', 'requires_php' => '7.4', 'last_updated' => '2026-10-12',
-                    'sections' => ['description' => '<p>D</p><script>x</script>', 'changelog' => '<h4>1.4.0</h4>'],
-                ]));
-        };
+        $this->serve('1.4.0', 'wawp-demo', '1.4.0');
         $zip = $this->zip;
         WawpTestState::$download = static function () use ($zip): string {
             $copy = $zip . '.dl';
             copy($zip, $copy);
 
             return $copy;
+        };
+    }
+
+    /** Le serveur propose $offer ; le paquet signé contient le plugin $slug en version $version. */
+    private function serve(string $offer, string $slug, string $version): void
+    {
+        if (is_file($this->zip)) {
+            unlink($this->zip);
+        }
+        PackageTest::zip($this->zip, ["$slug/$slug.php" => PackageTest::main($version), "$slug/readme.txt" => "Stable tag: $version\n"]);
+        $signature = Keys::sign_file($this->zip, $this->pair['secret']);
+        WawpTestState::$http = function (string $method) use ($signature, $offer): array {
+            $this->token++;
+
+            return $method === 'POST'
+                ? Http::response(200, Http::offer_body(['wawp-demo' => Http::offer($offer, $signature, 'jeton' . $this->token)]))
+                : Http::response(200, (string) json_encode([
+                    'name' => '<b>WAWP Démo</b>', 'slug' => 'wawp-demo', 'version' => '1.4.0', 'requires' => '6.4',
+                    'tested' => '6.8', 'requires_php' => '7.4', 'last_updated' => '2026-10-12',
+                    'sections' => ['description' => '<p>D</p><script>x</script>', 'changelog' => '<h4>1.4.0</h4>'],
+                ]));
         };
     }
 
@@ -101,8 +110,18 @@ final class UpdaterTest extends TestCase
     public function testServerFailureIsCachedOneHourAndBreaksNothing(): void
     {
         WawpTestState::$http = static fn () => new WP_Error('http_request_failed', 'timeout');
-        self::assertFalse($this->updater()->filter_update(false, [], self::BASENAME, []));
+        $update = $this->updater()->filter_update(false, [], self::BASENAME, []);
+        self::assertSame('', $update['package'], 'aucun paquet proposé');
         self::assertSame(3600, WawpTestState::$transients['wawp_updater_check']['ttl']);
+    }
+
+    public function testUpToDatePluginIsReportedAsNoUpdate(): void
+    {
+        WawpTestState::$http = static fn () => Http::response(200, Http::offer_body([]));
+        self::assertSame(
+            ['slug' => 'wawp-demo', 'version' => '1.3.0', 'url' => 'https://updates.wearewp.pro', 'package' => ''],
+            $this->updater()->filter_update(false, [], self::BASENAME, [])
+        );
     }
 
     public function testMultisiteSendsNetworkUrl(): void
@@ -147,9 +166,42 @@ final class UpdaterTest extends TestCase
     {
         $updater = $this->updater();
         self::assertFalse($updater->filter_pre_download(false, 'https://downloads.wordpress.org/plugin/x.zip', null, []));
-        self::assertSame('deja', $updater->filter_pre_download('deja', 'https://updates.wearewp.pro/v1/download/x', null, []));
+        self::assertSame('deja', $updater->filter_pre_download('deja', 'https://downloads.wordpress.org/plugin/x.zip', null, []));
         $unknown = $updater->filter_pre_download(false, 'https://updates.wearewp.pro/v1/download/x', null, ['plugin' => 'autre/autre.php']);
         self::assertSame('wawp_unknown_package', $unknown->get_error_code());
+    }
+
+    public function testPreDownloadRefusesAPackageAlreadyHandledByAnotherFilter(): void
+    {
+        $updater = $this->updater();
+        $updater->hooks();
+        self::assertSame([1], WawpTestState::$priorities['upgrader_pre_download']);
+        $result = $updater->filter_pre_download('/tmp/autre.zip', 'https://updates.wearewp.pro/v1/download/x', null, ['plugin' => self::BASENAME]);
+        self::assertInstanceOf(WP_Error::class, $result);
+        self::assertSame('wawp_package_hijacked', $result->get_error_code());
+        self::assertSame([], WawpTestState::$requests);
+    }
+
+    /** @return array<string, array{string, string, string, string}> */
+    public static function mismatches(): array
+    {
+        return [
+            'autre version signée (retour arrière)' => ['1.4.0', 'wawp-demo', '1.2.0', '1.3.0'],
+            'autre slug signé (substitution)' => ['1.4.0', 'wawp-autre', '1.4.0', '1.3.0'],
+            'version égale à l\'installée' => ['1.4.0', 'wawp-demo', '1.4.0', '1.4.0'],
+            'version inférieure à l\'installée' => ['1.4.0', 'wawp-demo', '1.4.0', '1.5.0'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('mismatches')]
+    public function testPreDownloadRefusesSignedPackageThatDoesNotMatchTheOffer(string $offer, string $slug, string $version, string $installed): void
+    {
+        WawpTestState::$versions[self::FILE] = $installed;
+        $this->serve($offer, $slug, $version);
+        $result = $this->updater()->filter_pre_download(false, 'https://updates.wearewp.pro/v1/download/x', null, ['plugin' => self::BASENAME]);
+        self::assertInstanceOf(WP_Error::class, $result);
+        self::assertSame('wawp_package_mismatch', $result->get_error_code());
+        self::assertFileDoesNotExist($this->zip . '.dl');
     }
 
     public function testPreDownloadReportsDownloadFailureWithoutLeakingTheToken(): void
