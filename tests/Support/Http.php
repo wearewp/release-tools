@@ -31,4 +31,24 @@ final class Http
             'signature' => $signature,
         ];
     }
+
+    /** @param array<string, array<string, mixed>> $offers */
+    public static function theme_body(array $offers): string
+    {
+        return (string) json_encode(['themes' => (object) $offers], JSON_UNESCAPED_SLASHES);
+    }
+
+    /** @return array<string, mixed> Offre de thème au format de /v1/check (spec thèmes 5.2). */
+    public static function theme_offer(string $slug, string $version, string $signature, string $token = 'abc.def'): array
+    {
+        return [
+            'theme' => $slug,
+            'new_version' => $version,
+            'requires' => '6.1',
+            'requires_php' => '7.4',
+            'url' => 'https://www.wearewp.pro/',
+            'package' => 'https://updates.wearewp.pro/v1/download/' . $token,
+            'signature' => $signature,
+        ];
+    }
 }

@@ -5,6 +5,7 @@ parameters:
     phpVersion: 70400
     paths:
         - wawp-updater
+        - wawp-theme-updater
         - scripts
         - bin
     bootstrapFiles:
