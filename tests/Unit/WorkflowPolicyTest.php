@@ -180,7 +180,7 @@ final class WorkflowPolicyTest extends TestCase
         self::assertStringContainsString("permissions:
   contents: read
 ", $yaml);
-        self::assertStringContainsString("        default: v1.1
+        self::assertStringContainsString("        default: v1.2
 ", $yaml);
         self::assertSame(2, substr_count($yaml, 'overwrite: true'));
         self::assertStringNotContainsString('--clobber', $yaml);
@@ -217,7 +217,7 @@ final class WorkflowPolicyTest extends TestCase
         $yaml = self::file('templates/theme-release.yml');
         self::assertStringContainsString("tags: ['v*.*.*']", $yaml);
         self::assertStringContainsString('permissions: {}', $yaml);
-        self::assertStringContainsString('uses: wearewp/release-tools/.github/workflows/theme-release.yml@v1.1', $yaml);
+        self::assertStringContainsString('uses: wearewp/release-tools/.github/workflows/theme-release.yml@v1.2', $yaml);
         self::assertStringContainsString('secrets: inherit', $yaml);
         self::assertStringContainsString('uses: wearewp/release-tools/.github/workflows/plugin-release.yml@v1', self::file('templates/release.yml'), 'les plugins restent sur v1');
     }

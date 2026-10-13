@@ -98,14 +98,14 @@ Suivre la section 11 de la spec (`docs/superpowers/specs/2026-10-12-serveur-mise
 
 La version de rotation de `wawp-updater` incrémente `$wawp_updater_version` dans `load.php` et `Config::VERSION` dans `src/class-config.php`, toujours égales (par exemple `1.0.0` vers `1.1.0`) : c'est la copie la plus récente qui est chargée sur un site. Une fois cette version taguée, relever `config/min-updater-version.txt` sur la branche `main` de release-tools à cette même version : chaque publication lit aussi ce fichier sur `main` et retient la plus haute des deux valeurs, ce qui bloque la publication d'un plugin qui embarque encore l'ancien client, même si son workflow est épinglé sur un ancien tag.
 
-## 9. Tag `v1.1` de release-tools (une seule fois)
+## 9. Tag `v1.2` de release-tools (une seule fois)
 
-Les thèmes utilisent `theme-release.yml@v1.1` ; les plugins restent sur `@v1`. Après fusion sur `main` de la branche qui ajoute `wawp-theme-updater/` et `theme-release.yml`, depuis un clone de release-tools, dans Git Bash (`gh` authentifié comme à l'étape 5) :
+Les thèmes utilisent `theme-release.yml@v1.2` ; les plugins restent sur `@v1`. Le tag `v1.1` (wawp-theme-updater 1.0.0) n'est plus utilisé : `config/min-theme-updater-version.txt` exige 1.0.1. Après fusion sur `main` de la branche qui passe `wawp-theme-updater/` en 1.0.1, depuis un clone de release-tools, dans Git Bash (`gh` authentifié comme à l'étape 5) :
 
 ```
 git checkout main && git pull
-git tag v1.1
-git push origin v1.1
+git tag v1.2
+git push origin v1.2
 ```
 
 Le ruleset de l'étape 5 protège aussi ce tag (motif `refs/tags/v*`) : il ne pourra être ni déplacé ni supprimé.
@@ -114,7 +114,7 @@ Le ruleset de l'étape 5 protège aussi ce tag (motif `refs/tags/v*`) : il ne po
 
 Le thème est un thème FSE autonome (pas de thème parent, pas d'en-tête `Template`), actif sur un seul site. Le dépôt appartient à l'organisation `wearewp`, est privé et porte le nom du slug du thème, qui est aussi le nom de son dossier et son `Text Domain`.
 
-1. Copier `wawp-theme-updater/` (version taguée `v1.1`) à la racine du thème : `git -C <release-tools> archive v1.1 wawp-theme-updater | tar -x -C <thème>`.
+1. Copier `wawp-theme-updater/` (version taguée `v1.2`) à la racine du thème : `git -C <release-tools> archive v1.2 wawp-theme-updater | tar -x -C <thème>`.
 2. Dans `functions.php`, après le contrôle `ABSPATH` :
    ```php
    require __DIR__ . '/wawp-theme-updater/load.php';
