@@ -89,4 +89,49 @@ final class CheckHeadersTest extends TestCase
             self::assertStringContainsString($expected, $out, $label);
         }
     }
+
+    public function testFullErrorReportIsUnchanged(): void
+    {
+        unlink($this->dir . '/readme.txt');
+        unlink($this->dir . '/.distignore');
+        $this->write('wawp-demo.php', "<?php
+/* Plugin Name: X
+ * Version: 1.3.9
+ */
+");
+        [$code, $out, $err] = Cli::run([PHP_BINARY, Cli::php('scripts/check-headers.php'), $this->dir, 'wawp-demo', 'v1.4.0', '1.0.0']);
+        self::assertSame(1, $code);
+        self::assertSame('', $out);
+        self::assertSame(
+            "Contrôles en échec :
+- En-tête Version (1.3.9) différent du tag (1.4.0).
+- En-tête Update URI absent ou différent de https://updates.wearewp.pro.
+- readme.txt absent.
+- Fichier .distignore absent.
+",
+            $err
+        );
+    }
+
+    public function testExplicitPluginTypeIsTheDefault(): void
+    {
+        $script = Cli::php('scripts/check-headers.php');
+        self::assertSame(
+            Cli::run([PHP_BINARY, $script, $this->dir, 'wawp-demo', 'v1.4.0', '1.0.0']),
+            Cli::run([PHP_BINARY, $script, '--type=plugin', $this->dir, 'wawp-demo', 'v1.4.0', '1.0.0'])
+        );
+        $this->write('readme.txt', "Stable tag: 1.4.1
+");
+        self::assertSame(
+            Cli::run([PHP_BINARY, $script, $this->dir, 'wawp-demo', 'v1.4.0', '1.0.0']),
+            Cli::run([PHP_BINARY, $script, $this->dir, 'wawp-demo', 'v1.4.0', '1.0.0', '--type=plugin'])
+        );
+    }
+
+    public function testUnknownTypeIsRefused(): void
+    {
+        [$code, , $err] = Cli::run([PHP_BINARY, Cli::php('scripts/check-headers.php'), '--type=child', $this->dir, 'wawp-demo', 'v1.4.0', '1.0.0']);
+        self::assertSame(1, $code);
+        self::assertStringContainsString('Type invalide : « child » (plugin ou theme).', $err);
+    }
 }
