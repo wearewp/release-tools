@@ -1,0 +1,14 @@
+name: Publication
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions: {}
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: wearewp/release-tools/.github/workflows/theme-release.yml@v1.1
+    secrets: inherit

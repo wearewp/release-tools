@@ -1,7 +1,8 @@
 <?xml version="1.0"?>
 <ruleset name="WAWP Updater">
-    <description>Standard WordPress et compatibilité PHP 7.4 pour la bibliothèque embarquée.</description>
+    <description>Standard WordPress et compatibilité PHP 7.4 pour les bibliothèques embarquées.</description>
     <file>wawp-updater</file>
+    <file>wawp-theme-updater</file>
     <arg name="extensions" value="php"/>
     <arg value="sp"/>
     <config name="testVersion" value="7.4-"/>
@@ -12,6 +13,7 @@
         <properties>
             <property name="text_domain" type="array">
                 <element value="wawp-updater"/>
+                <element value="wawp-theme-updater"/>
             </property>
         </properties>
     </rule>
@@ -20,6 +22,8 @@
             <property name="prefixes" type="array">
                 <element value="WAWP\Updater"/>
                 <element value="wawp_updater"/>
+                <element value="WAWP\ThemeUpdater"/>
+                <element value="wawp_theme_updater"/>
             </property>
         </properties>
     </rule>

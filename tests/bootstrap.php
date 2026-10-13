@@ -11,3 +11,10 @@ foreach (['config', 'validator', 'signature', 'client', 'package', 'updater'] as
         require_once $file;
     }
 }
+
+foreach (['config', 'validator', 'theme-validator', 'signature', 'client', 'package', 'updater'] as $class) {
+    $file = dirname(__DIR__) . "/wawp-theme-updater/src/class-$class.php";
+    if (is_file($file)) {
+        require_once $file;
+    }
+}

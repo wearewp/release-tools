@@ -28,7 +28,7 @@ final class WorkflowPolicyTest extends TestCase
 
     public function testEveryActionIsOfficialAndPinnedBySha(): void
     {
-        foreach (['.github/workflows/plugin-release.yml', 'templates/release.yml'] as $path) {
+        foreach (['.github/workflows/plugin-release.yml', 'templates/release.yml', '.github/workflows/theme-release.yml', 'templates/theme-release.yml'] as $path) {
             preg_match_all('/^\s*(?:-\s*)?uses:\s*(\S+)/m', self::file($path), $m);
             foreach ($m[1] as $uses) {
                 if (str_starts_with($uses, 'wearewp/release-tools/')) {
@@ -167,5 +167,58 @@ final class WorkflowPolicyTest extends TestCase
         [$code, , $err] = Cli::run(['bash', 'scripts/upload-ftps.sh', 'dist/wawp-demo-1.4.0.zip']);
         self::assertSame(1, $code);
         self::assertStringNotContainsString('Nom de paquet invalide', $err);
+    }
+
+    public function testThemeWorkflowSharesSigningAndReleaseJobsWithThePluginOne(): void
+    {
+        $yaml = self::file('.github/workflows/theme-release.yml');
+        $plugin = self::jobs(self::file('.github/workflows/plugin-release.yml'));
+        $theme = self::jobs($yaml);
+        self::assertSame(['build', 'sign-upload', 'publish-release'], array_keys($theme));
+        self::assertSame($plugin['sign-upload'], $theme['sign-upload'], 'signature et envoi : aucun écart avec les plugins');
+        self::assertSame($plugin['publish-release'], $theme['publish-release']);
+        self::assertStringContainsString("permissions:
+  contents: read
+", $yaml);
+        self::assertStringContainsString("        default: v1.1
+", $yaml);
+        self::assertSame(2, substr_count($yaml, 'overwrite: true'));
+        self::assertStringNotContainsString('--clobber', $yaml);
+    }
+
+    public function testThemeBuildJobChecksTheThemeWithoutSecrets(): void
+    {
+        $build = self::jobs(self::file('.github/workflows/theme-release.yml'))['build'];
+        self::assertStringNotContainsString('secrets.', $build);
+        self::assertStringContainsString("if: startsWith(github.ref, 'refs/tags/v')", $build);
+        self::assertStringContainsString('timeout-minutes:', $build);
+        self::assertSame(substr_count($build, 'actions/checkout@'), substr_count($build, 'persist-credentials: false'));
+
+        $steps = self::steps($build);
+        $main = $steps['Version minimale de wawp-theme-updater exigée sur main'] ?? '';
+        foreach (['repository: wearewp/release-tools', 'ref: main', 'path: tools-main', 'sparse-checkout: config', 'persist-credentials: false'] as $needle) {
+            self::assertStringContainsString($needle, $main, $needle);
+        }
+        $checks = $steps['Contrôles avant publication'] ?? '';
+        foreach (['tools/config/min-theme-updater-version.txt', 'tools-main/config/min-theme-updater-version.txt', 'sort -V | tail -n 1', 'php tools/scripts/check-headers.php --type=theme theme "$SLUG" "$GITHUB_REF_NAME" "$min"'] as $needle) {
+            self::assertStringContainsString($needle, $checks, $needle);
+        }
+        $package = $steps['Paquet'] ?? '';
+        $rsync = (int) strpos($package, 'rsync -a --exclude-from=theme/.distignore');
+        $check = (int) strpos($package, 'php tools/scripts/check-package.php --type=theme "build/$SLUG" "$SLUG" "$VERSION"');
+        $zip = (int) strpos($package, 'zip -rqX');
+        self::assertGreaterThan(0, $rsync);
+        self::assertLessThan($check, $rsync);
+        self::assertLessThan($zip, $check);
+    }
+
+    public function testThemeCallerTemplate(): void
+    {
+        $yaml = self::file('templates/theme-release.yml');
+        self::assertStringContainsString("tags: ['v*.*.*']", $yaml);
+        self::assertStringContainsString('permissions: {}', $yaml);
+        self::assertStringContainsString('uses: wearewp/release-tools/.github/workflows/theme-release.yml@v1.1', $yaml);
+        self::assertStringContainsString('secrets: inherit', $yaml);
+        self::assertStringContainsString('uses: wearewp/release-tools/.github/workflows/plugin-release.yml@v1', self::file('templates/release.yml'), 'les plugins restent sur v1');
     }
 }

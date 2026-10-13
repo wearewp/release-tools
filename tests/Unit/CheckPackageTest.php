@@ -103,4 +103,31 @@ final class CheckPackageTest extends TestCase
             self::assertStringContainsString($expected, $out, $label);
         }
     }
+
+    public function testFullErrorReportIsUnchanged(): void
+    {
+        unlink($this->dir . '/wawp-updater/bootstrap.php');
+        $this->write('wawp-demo.php', self::main(version: '1.3.9', register: ''));
+        [$code, $out, $err] = Cli::run([PHP_BINARY, Cli::php('scripts/check-package.php'), $this->dir, 'wawp-demo', '1.4.0']);
+        self::assertSame(1, $code);
+        self::assertSame('', $out);
+        self::assertSame(
+            "Paquet non conforme :\n- wawp-updater/bootstrap.php absent du paquet.\n- wawp-demo.php n'appelle pas \\WAWP\\Updater\\register(.\n- En-tête Version (1.3.9) différent de la version publiée (1.4.0).\n",
+            $err
+        );
+    }
+
+    public function testExplicitPluginTypeIsTheDefault(): void
+    {
+        $script = Cli::php('scripts/check-package.php');
+        self::assertSame(
+            Cli::run([PHP_BINARY, $script, $this->dir, 'wawp-demo', '1.4.0']),
+            Cli::run([PHP_BINARY, $script, '--type=plugin', $this->dir, 'wawp-demo', '1.4.0'])
+        );
+        unlink($this->dir . '/wawp-updater/load.php');
+        self::assertSame(
+            Cli::run([PHP_BINARY, $script, $this->dir, 'wawp-demo', '1.4.0']),
+            Cli::run([PHP_BINARY, $script, '--type=plugin', $this->dir, 'wawp-demo', '1.4.0'])
+        );
+    }
 }
