@@ -56,4 +56,23 @@ final class SetupRepoTest extends TestCase
         self::assertSame(1, $code);
         self::assertStringContainsString('wearewp/', $err);
     }
+
+    public function testThemesAreDetectedAndGetTheThemeWorkflow(): void
+    {
+        $script = self::script();
+        foreach ([
+            'if [ -f "$path/style.css" ] && grep -q \'Theme Name:\' "$path/style.css" && [ ! -f "$path/$slug.php" ]; then',
+            'template="theme-release.yml"',
+            'cp "$tools/templates/$template" "$path/.github/workflows/release.yml"',
+            'echo "Type détecté : $kind."',
+            "\"\$path/style.css\" 2>/dev/null",
+            'wawp-theme-updater/load.php',
+        ] as $needle) {
+            self::assertStringContainsString($needle, $script, $needle);
+        }
+        // Contrôles d'origine des plugins conservés.
+        foreach (['template="release.yml"', '"$path/$slug.php" 2>/dev/null', '"$path/wawp-updater/load.php"'] as $needle) {
+            self::assertStringContainsString($needle, $script, $needle);
+        }
+    }
 }

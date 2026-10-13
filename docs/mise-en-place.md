@@ -1,4 +1,4 @@
-# Mise en place de la publication des plugins WeAre[WP]
+# Mise en place de la publication des plugins et des thèmes WeAre[WP]
 
 Procédure unique, à suivre dans l'ordre. Les étapes marquées 🔒 manipulent des secrets : Thierry les exécute lui-même, dans son propre terminal, jamais dans une session automatisée.
 
@@ -98,6 +98,39 @@ Suivre la section 11 de la spec (`docs/superpowers/specs/2026-10-12-serveur-mise
 
 La version de rotation de `wawp-updater` incrémente `$wawp_updater_version` dans `load.php` et `Config::VERSION` dans `src/class-config.php`, toujours égales (par exemple `1.0.0` vers `1.1.0`) : c'est la copie la plus récente qui est chargée sur un site. Une fois cette version taguée, relever `config/min-updater-version.txt` sur la branche `main` de release-tools à cette même version : chaque publication lit aussi ce fichier sur `main` et retient la plus haute des deux valeurs, ce qui bloque la publication d'un plugin qui embarque encore l'ancien client, même si son workflow est épinglé sur un ancien tag.
 
+## 9. Tag `v1.1` de release-tools (une seule fois)
+
+Les thèmes utilisent `theme-release.yml@v1.1` ; les plugins restent sur `@v1`. Après fusion sur `main` de la branche qui ajoute `wawp-theme-updater/` et `theme-release.yml`, depuis un clone de release-tools, dans Git Bash (`gh` authentifié comme à l'étape 5) :
+
+```
+git checkout main && git pull
+git tag v1.1
+git push origin v1.1
+```
+
+Le ruleset de l'étape 5 protège aussi ce tag (motif `refs/tags/v*`) : il ne pourra être ni déplacé ni supprimé.
+
+## 10. Préparer un dépôt de thème
+
+Le thème est un thème FSE autonome (pas de thème parent, pas d'en-tête `Template`), actif sur un seul site. Le dépôt appartient à l'organisation `wearewp`, est privé et porte le nom du slug du thème, qui est aussi le nom de son dossier et son `Text Domain`.
+
+1. Copier `wawp-theme-updater/` (version taguée `v1.1`) à la racine du thème : `git -C <release-tools> archive v1.1 wawp-theme-updater | tar -x -C <thème>`.
+2. Dans `functions.php`, après le contrôle `ABSPATH` :
+   ```php
+   require __DIR__ . '/wawp-theme-updater/load.php';
+   \WAWP\ThemeUpdater\register( __DIR__ );
+   ```
+3. Dans `style.css` : `Update URI: https://updates.wearewp.pro`, `Requires at least: 6.1` (ou plus), `Requires PHP`, `Text Domain: <slug>`, `Version` à la prochaine version mineure.
+4. Créer `.distignore` avec des motifs racine ancrés par `/` (`/.git`, `/.github`, `/node_modules`, `/src`…).
+5. Contrôler localement : `php <release-tools>/scripts/check-headers.php --type=theme <thème> <slug> v<version> 1.0.0` → `Contrôles réussis`.
+6. Lancer, dans Git Bash, depuis le dossier de release-tools : `bash bin/setup-repo.sh wearewp/<slug> <chemin-local-du-thème>` (`Type détecté : theme.`), puis commiter `.github/workflows/release.yml`.
+7. Ajouter le slug à la liste `themes` de la licence du site (`bin/new-key.php --theme=<slug>` pour une nouvelle licence, ou édition du registre puis `bin/check-licences.php`).
+8. Publier comme un plugin (section 7, sans `readme.txt`), puis, après sauvegarde du site, installer une fois le zip publié à la main (Apparence › Thèmes › Ajouter › Téléverser, remplacer le thème actif). Les versions suivantes passent par les mises à jour de WordPress.
+
+Le client des thèmes ne place jamais l'adresse de téléchargement dans le cache de WordPress, mais un marqueur `https://updates.wearewp.pro/v1/theme-update/<slug>` : `wawp-updater` 1.0.0, embarqué dans les plugins, refuse toute adresse `/v1/download/` hors d'une mise à jour de plugin. Une rotation de clé de signature (section 8) concerne aussi `wawp-theme-updater/src/class-config.php` (même `PUBLIC_KEYS`) et `config/min-theme-updater-version.txt`.
+
 ## Limite connue
 
 WordPress n'appelle les filtres `Update URI` qu'après une réponse réussie d'`api.wordpress.org`. Si ce service est injoignable depuis un site, les mises à jour WeAre[WP] n'y apparaissent pas tant que la situation dure ; elles réapparaissent dès le contrôle suivant.
+
+Il en va de même pour les thèmes (filtre `update_themes_updates.wearewp.pro`). WordPress envoie aussi à api.wordpress.org la liste des thèmes installés, dont le slug du thème client : si un thème public de wordpress.org portait le même slug, sa mise à jour serait proposée à la place. Choisir des slugs de thèmes propres au client.
