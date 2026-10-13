@@ -50,7 +50,8 @@ final class Client {
 			return array(
 				'status' => 0,
 				'offers' => null,
-				'error'  => 'réseau : ' . self::network_error( $response, $key ),
+				/* translators: %s: code et message de l'erreur de transport WordPress. */
+				'error'  => sprintf( __( 'réseau : %s', 'wawp-theme-updater' ), self::plain( (string) $response->get_error_code(), $key ) . ' ' . self::plain( (string) $response->get_error_message(), $key ) ),
 			);
 		}
 		$status = (int) wp_remote_retrieve_response_code( $response );
@@ -58,7 +59,8 @@ final class Client {
 			return array(
 				'status' => $status,
 				'offers' => null,
-				'error'  => 'HTTP ' . $status,
+				/* translators: %d: statut HTTP de la réponse du serveur. */
+				'error'  => sprintf( __( 'HTTP %d', 'wawp-theme-updater' ), $status ),
 			);
 		}
 		$offers = Theme_Validator::check_response( wp_remote_retrieve_body( $response ), array_map( 'strval', array_keys( $installed ) ) );
@@ -66,22 +68,21 @@ final class Client {
 		return array(
 			'status' => 200,
 			'offers' => $offers,
-			'error'  => null === $offers ? 'réponse invalide' : null,
+			'error'  => null === $offers ? __( 'réponse invalide', 'wawp-theme-updater' ) : null,
 		);
 	}
 
 	/**
-	 * Code et message d'une erreur de transport, en texte brut d'une ligne : clé de licence masquée, message tronqué
-	 * à 200 caractères. La requête /v1/check ne porte aucun jeton de téléchargement.
+	 * Texte d'une erreur de transport (code ou message) réduit à du texte brut d'une ligne : clé de licence masquée,
+	 * tronqué à 200 caractères. La requête /v1/check ne porte aucun jeton de téléchargement.
 	 *
-	 * @param \WP_Error $error Erreur de transport.
-	 * @param string    $key   Clé de licence.
+	 * @param string $text Code ou message de l'erreur.
+	 * @param string $key  Clé de licence.
 	 */
-	private static function network_error( \WP_Error $error, string $key ): string {
-		$message = str_replace( $key, '***', (string) $error->get_error_message() );
-		$message = (string) preg_replace( '/[\x00-\x1F\x7F<>]/', ' ', $message );
+	private static function plain( string $text, string $key ): string {
+		$text = (string) preg_replace( '/[\x00-\x1F\x7F<>]/', ' ', str_replace( $key, '***', $text ) );
 
 		// mb_substr() est toujours défini : WordPress en fournit une version de repli (wp-includes/compat.php).
-		return (string) $error->get_error_code() . ' ' . mb_substr( $message, 0, 200, 'UTF-8' );
+		return mb_substr( $text, 0, 200, 'UTF-8' );
 	}
 }

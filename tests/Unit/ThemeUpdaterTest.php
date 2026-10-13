@@ -127,13 +127,14 @@ final class ThemeUpdaterTest extends TestCase
         self::assertStringNotContainsString(self::KEY, $result->get_error_message());
     }
 
-    public function testNetworkFailureTwiceReportsTheNetworkCause(): void
+    public function testServerErrorThenNetworkFailureReportsTheNetworkCause(): void
     {
-        $this->answers([[503, '{"status":"unavailable"}'], null]);
+        $this->answers([[503, '{"status":"unavailable"}'], null, 'offre']);
         $result = $this->updater()->filter_pre_download(false, self::MARKER, null, ['theme' => self::SLUG]);
 
         self::assertStringContainsString('(réseau : http_request_failed cURL error 28: Operation timed out)', $result->get_error_message());
         self::assertStringNotContainsString(self::KEY, $result->get_error_message());
+        self::assertCount(2, WawpTestState::$requests, 'jamais plus de deux requêtes /v1/check par téléchargement');
     }
 
     public function testRefusedLicenceIsNotRetried(): void

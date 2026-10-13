@@ -73,6 +73,7 @@ final class ThemeClientTest extends TestCase
             'réponse invalide' => [static fn (): array => Http::response(200, 'pas du JSON'), 'réponse invalide'],
             'réponse de plugins' => [static fn (): array => Http::response(200, '{"plugins":{}}'), 'réponse invalide'],
             'clé dans le message réseau' => [static fn () => new WP_Error('http_request_failed', "Authorization: Bearer " . self::KEY . "\n<b>"), 'réseau : http_request_failed Authorization: Bearer ***  b '],
+            'clé et balises dans le code réseau' => [static fn () => new WP_Error("<i>\n" . self::KEY, 'timeout'), 'réseau :  i  *** timeout'],
         ];
         foreach ($cases as $label => [$http, $error]) {
             WawpTestState::$http = $http;
