@@ -18,6 +18,7 @@ $port = 8767;
 $endpoint = "http://127.0.0.1:$port";
 $slug = 'wawp-test-plugin';
 $basename = "$slug/$slug.php";
+$themeSlug = 'wawp-test-theme';
 $failures = 0;
 $masks = array();
 
@@ -133,10 +134,10 @@ require "$data/app/autoload.php";
 $key = \WAWP\UpdateServer\Licence\KeyGenerator::key();
 $masks[] = $key;
 $hasher = new \WAWP\UpdateServer\Licence\KeyHasher(\WAWP\UpdateServer\Secrets::loadHex("$data/secrets/key_pepper"));
-$writeLicences = static function (bool $active) use ($data, $hasher, $key, $slug): void {
+$writeLicences = static function (bool $active, bool $withTheme = true) use ($data, $hasher, $key, $slug, $themeSlug): void {
     file_put_contents("$data/licences.json", (string) json_encode(['schema' => 1, 'licences' => [[
         'id' => 'lic_e2eclient', 'key_hash' => $hasher->hash($key), 'client' => 'E2E', 'domains' => ['127.0.0.1'],
-        'plugins' => [$slug], 'expires' => null, 'active' => $active,
+        'plugins' => [$slug], 'themes' => $withTheme ? [$themeSlug] : [], 'expires' => null, 'active' => $active,
     ]]], JSON_PRETTY_PRINT));
 };
 $writeLicences(true);
@@ -192,6 +193,42 @@ $publish = static function (string $version, bool $corruptAfter = false) use ($t
     return $signCode === 0 && $ingestCode === 0 && $published;
 };
 
+// 3 bis. Construction et publication d'une version du thème de test.
+$makeTheme = static function (string $version, string $target) use ($e2e, $root, $copy, $endpoint, $public): void {
+    foreach (['style.css', 'functions.php', 'theme.json', 'templates/index.html'] as $file) {
+        @mkdir(dirname("$target/$file"), 0777, true);
+        file_put_contents("$target/$file", str_replace('{{VERSION}}', $version, (string) file_get_contents("$e2e/fixture/wawp-test-theme/$file")));
+    }
+    $copy("$root/wawp-theme-updater", "$target/wawp-theme-updater");
+    $config = (string) file_get_contents("$target/wawp-theme-updater/src/class-config.php");
+    $config = (string) preg_replace("/const ENDPOINT = '[^']*';/", "const ENDPOINT = '$endpoint';", $config);
+    $config = (string) preg_replace('/const PUBLIC_KEYS = array\([^)]*\);/', "const PUBLIC_KEYS = array( '$public' );", $config);
+    file_put_contents("$target/wawp-theme-updater/src/class-config.php", $config);
+};
+
+$publishTheme = static function (string $version, bool $corruptAfter = false) use ($tmp, $data, $themeSlug, $makeTheme, $remove, $run, $root, $secret): bool {
+    $build = "$tmp/build-theme/$themeSlug";
+    $remove("$tmp/build-theme");
+    $makeTheme($version, $build);
+    $zipPath = "$data/incoming/$themeSlug-$version.zip";
+    $zip = new ZipArchive();
+    $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($build, FilesystemIterator::SKIP_DOTS));
+    foreach ($files as $file) {
+        $relative = str_replace('\\', '/', substr($file->getPathname(), strlen("$tmp/build-theme/")));
+        $zip->addFile($file->getPathname(), $relative);
+    }
+    $zip->close();
+    [$signCode] = $run([PHP_BINARY, "$root/scripts/sign.php", $zipPath], ['SIGNING_KEY' => $secret]);
+    [$ingestCode] = $run([PHP_BINARY, "$data/bin/ingest.php"]);
+    $published = is_file("$data/packages/$themeSlug/$themeSlug-$version.zip");
+    if ($corruptAfter && $published) {
+        file_put_contents("$data/packages/$themeSlug/$themeSlug-$version.zip", 'corruption', FILE_APPEND);
+    }
+
+    return $signCode === 0 && $ingestCode === 0 && $published;
+};
+
 // 4. WordPress avec SQLite.
 $wpDir = "$tmp/wp";
 $unzip($wpZip, $tmp);
@@ -228,12 +265,17 @@ file_put_contents("$wpDir/wp-content/mu-plugins/e2e-reseau-local.php", "<?php\n"
     . "add_filter( 'pre_http_request', static function ( \$pre, \$args, \$url ) {\n"
     . "\t\$host = (string) wp_parse_url( \$url, PHP_URL_HOST );\n"
     . "\tif ( '127.0.0.1' === \$host ) { return \$pre; }\n"
+    . "\tif ( 'api.wordpress.org' === \$host && false !== strpos( \$url, '/themes/info/' ) ) { return array( 'headers' => array(), 'body' => '{\"error\":\"Theme not found\"}', 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null ); }\n"
     . "\tif ( 'api.wordpress.org' === \$host ) { return array( 'headers' => array(), 'body' => '{\"plugins\":[],\"translations\":[],\"no_update\":[],\"themes\":[]}', 'response' => array( 'code' => 200, 'message' => 'OK' ), 'cookies' => array(), 'filename' => null ); }\n"
     . "\treturn new WP_Error( 'e2e_reseau_bloque', \$host );\n"
     . "}, 10, 3 );\n");
 
 $wp = static function (string ...$args) use ($run, $wpcli, $wpDir): array {
     return $run(array_merge([PHP_BINARY, $wpcli, "--path=$wpDir", '--skip-themes'], $args));
+};
+// Commandes WP-CLI avec le thème actif chargé (son functions.php charge wawp-theme-updater).
+$wpTheme = static function (string ...$args) use ($run, $wpcli, $wpDir): array {
+    return $run(array_merge([PHP_BINARY, $wpcli, "--path=$wpDir"], $args));
 };
 [$code, $out] = $wp('core', 'install', '--url=http://127.0.0.1:8768', '--title=E2E', '--admin_user=e2e', '--admin_password=' . bin2hex(random_bytes(16)), '--admin_email=e2e@example.test', '--skip-email');
 $check('installation de WordPress (SQLite)', $code === 0, $out);
@@ -337,6 +379,50 @@ try {
         return str_contains($line, '"event":"check_denied"') && str_contains($line, '"reason":"inactive"');
     });
     $check('licence révoquée : refus inactive journalisé', count($denied) >= 1);
+    $writeLicences(true);
+
+    // f. Thème : offre, marqueur dans le cache, jeton frais, installation avec wawp-updater actif, paquet altéré refusé.
+    $makeTheme('1.0.0', "$wpDir/wp-content/themes/$themeSlug");
+    [$code, $out] = $wpTheme('theme', 'activate', $themeSlug);
+    $check('activation du thème de test 1.0.0', $code === 0, $out);
+    $themeVersion = static function () use ($wpTheme, $themeSlug): string {
+        return trim($wpTheme('theme', 'get', $themeSlug, '--field=version')[1]);
+    };
+    // Renvoie la version proposée ('' si aucune) ou '#erreur' si WP-CLI échoue.
+    $themeUpdateVersion = static function () use ($wpTheme, $themeSlug): string {
+        [$code, $out] = $wpTheme('theme', 'list', "--name=$themeSlug", '--fields=name,update_version', '--format=json');
+        $list = $code === 0 ? json_decode($out, true) : null;
+        if (!is_array($list) || !isset($list[0]['name'], $list[0]['update_version']) || $list[0]['name'] !== $themeSlug) {
+            return '#erreur';
+        }
+
+        return (string) $list[0]['update_version'];
+    };
+    $flushTheme = static function () use ($wp): void {
+        $wp('eval', 'delete_site_transient( "wawp_theme_updater_check" ); delete_site_transient( "update_themes" );');
+    };
+
+    $check('publication du thème 1.1.0', $publishTheme('1.1.0'));
+    $flushTheme();
+    $check('mise à jour du thème 1.1.0 proposée', $themeUpdateVersion() === '1.1.0');
+    [$markerCode, $marker] = $wpTheme('eval', '$t = get_site_transient( "update_themes" ); echo $t->response["' . $themeSlug . '"]["package"] ?? "absent";');
+    $check('cache de WordPress : marqueur de paquet, aucun jeton', $markerCode === 0 && trim($marker) === "$endpoint/v1/theme-update/$themeSlug", $marker);
+    $linesBefore = count($accessLines());
+    [$code, $out] = $wpTheme('theme', 'update', $themeSlug);
+    $check('mise à jour du thème 1.1.0 installée', $code === 0 && $themeVersion() === '1.1.0', $out);
+    $joined = implode("\n", array_slice($accessLines(), $linesBefore));
+    $check('journal : check frais du thème puis téléchargement de type theme', str_contains($joined, '"installed_themes":{"' . $themeSlug . '":"1.0.0"}') && str_contains($joined, '"slug":"' . $themeSlug . '","version":"1.1.0","type":"theme"'), $joined);
+    $check('wawp-updater (plugin de test) actif pendant la mise à jour du thème', $wp('plugin', 'is-active', $slug)[0] === 0);
+
+    $check('publication du thème 1.2.0 puis altération', $publishTheme('1.2.0', true));
+    $flushTheme();
+    [$code, $out] = $wpTheme('theme', 'update', $themeSlug);
+    $check('thème altéré refusé', $code !== 0 && str_contains($out, 'Signature du thème WeAre[WP] invalide') && $themeVersion() === '1.1.0', $out);
+    $check('thème toujours actif', trim($wp('option', 'get', 'stylesheet')[1]) === $themeSlug);
+
+    $writeLicences(true, false);
+    $flushTheme();
+    $check('thème non couvert par la licence : aucune offre', $themeUpdateVersion() === '');
     $writeLicences(true);
 
     // e. Clé retirée de wp-config.php : aucune requête vers le serveur.
