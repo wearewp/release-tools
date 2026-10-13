@@ -128,6 +128,7 @@ final class Updater {
 		if ( ! is_string( $package ) || 0 !== strpos( $package, Config::PACKAGE_MARKER ) ) {
 			return $reply;
 		}
+		$file = null;
 		try {
 			if ( false !== $reply ) {
 				// Enregistré en priorité 1 : un autre filtre qui a déjà fourni un fichier court-circuiterait la signature.
@@ -160,6 +161,11 @@ final class Updater {
 
 			return $file;
 		} catch ( \Throwable $e ) {
+			if ( is_string( $file ) ) {
+				// Exception après le téléchargement : ne pas laisser le paquet dans le dossier temporaire.
+				wp_delete_file( $file );
+			}
+
 			return new \WP_Error( 'wawp_theme_updater_error', __( 'Erreur du client de mise à jour des thèmes WeAre[WP] : mise à jour annulée.', 'wawp-theme-updater' ) );
 		}
 	}

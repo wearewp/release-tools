@@ -41,9 +41,9 @@ final class ThemeCheckPackageTest extends TestCase
         rmdir($root);
     }
 
-    private static function style(string $version = '1.4.0', string $uri = 'https://updates.wearewp.pro'): string
+    private static function style(string $version = '1.4.0', string $uri = 'https://updates.wearewp.pro', string $textDomain = 'wawp-demo-theme', string $extra = ''): string
     {
-        return "/*\nTheme Name: WAWP Démo\nVersion: $version\nRequires at least: 6.1\nRequires PHP: 7.4\nText Domain: wawp-demo-theme\nUpdate URI: $uri\n*/\n";
+        return "/*\nTheme Name: WAWP Démo\nVersion: $version\nRequires at least: 6.1\nRequires PHP: 7.4\nText Domain: $textDomain\nUpdate URI: $uri\n$extra*/\n";
     }
 
     private static function functions(string $load = "require __DIR__ . '/wawp-theme-updater/load.php';", string $register = '\WAWP\ThemeUpdater\register( __DIR__ );'): string
@@ -96,6 +96,8 @@ final class ThemeCheckPackageTest extends TestCase
             'style.css absent' => [fn () => unlink($this->dir . '/style.css'), null, 'style.css absent du paquet.'],
             'version' => [fn () => $this->write('style.css', self::style(version: '1.3.9')), null, 'En-tête Version de style.css (1.3.9) différent de la version publiée (1.4.0).'],
             'update uri' => [fn () => $this->write('style.css', self::style(uri: 'https://updates.wearewp.pro/')), null, 'Update URI'],
+            'text domain différent du slug' => [fn () => $this->write('style.css', self::style(textDomain: 'autre')), null, 'En-tête Text Domain absent ou différent du slug (wawp-demo-theme) : le client s\'en sert pour vérifier le dossier du thème.'],
+            'thème enfant' => [fn () => $this->write('style.css', self::style(extra: "Template: twentytwentyfive\n")), null, 'En-tête Template présent : les thèmes enfants ne sont pas pris en charge.'],
             'fichier de plugin' => [fn () => $this->write('wawp-demo-theme.php', "<?php\n"), null, 'wawp-demo-theme.php présent'],
             'une seule clé' => [fn () => $this->config([$this->keys[0]]), null, 'PUBLIC_KEYS doit contenir exactement deux clés publiques Ed25519 distinctes (wawp-theme-updater/src/class-config.php).'],
             'clés identiques' => [fn () => $this->config([$this->keys[0], $this->keys[0]]), null, 'PUBLIC_KEYS'],

@@ -23,7 +23,7 @@ final class WawpTestState
     public static array $requests = [];
     public static bool $can = true;
     public static ?object $screen = null;
-    /** @var array<string, string> */
+    /** @var array<string, string|\Throwable> */
     public static array $versions = [];
     public static bool $multisite = false;
     /** @var array<string, array<string, string>> chemin de fichier vers en-têtes (hors Version) */
@@ -91,7 +91,12 @@ function get_file_data(string $file, array $headers): array
 {
     $data = [];
     foreach ($headers as $field => $name) {
-        $data[$field] = $name === 'Version' ? (WawpTestState::$versions[$file] ?? '') : (WawpTestState::$headers[$file][$name] ?? '');
+        $version = WawpTestState::$versions[$file] ?? '';
+        if ($version instanceof \Throwable) {
+            // Permet de provoquer une exception à la lecture de style.css (voir ThemeUpdaterTest).
+            throw $version;
+        }
+        $data[$field] = $name === 'Version' ? $version : (WawpTestState::$headers[$file][$name] ?? '');
     }
 
     return $data;

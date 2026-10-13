@@ -96,6 +96,12 @@ if ($isTheme) {
         if ($header($style, 'Update URI') !== 'https://updates.wearewp.pro') {
             $errors[] = 'En-tête Update URI de style.css absent ou différent de https://updates.wearewp.pro.';
         }
+        if ($header($style, 'Text Domain') !== $slug) {
+            $errors[] = "En-tête Text Domain absent ou différent du slug ($slug) : le client s'en sert pour vérifier le dossier du thème.";
+        }
+        if ($header($style, 'Template') !== null) {
+            $errors[] = 'En-tête Template présent : les thèmes enfants ne sont pas pris en charge.';
+        }
     }
     if (is_file("$dir/$slug.php")) {
         $errors[] = "$slug.php présent dans le paquet d'un thème : le serveur le refuserait.";

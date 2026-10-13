@@ -69,6 +69,15 @@ final class SharedCodeTest extends TestCase
         self::assertSame(\WAWP\Updater\Config::HOST, \WAWP\ThemeUpdater\Config::HOST);
     }
 
+    /** Le contrôle de Theme URI de check-headers.php doit refuser exactement ce que le client et le serveur refusent. */
+    public function testThemeUriPatternOfCheckHeadersMatchesTheClientOne(): void
+    {
+        $source = (string) file_get_contents(dirname(__DIR__, 2) . '/scripts/check-headers.php');
+        self::assertSame(1, preg_match("/preg_match\\('([^']+)', \\\$themeUri\\)/", $source, $match), 'motif de Theme URI introuvable dans check-headers.php');
+        // Le motif est un littéral PHP entre apostrophes : les doubles barres obliques inverses y valent une seule.
+        self::assertSame(\WAWP\ThemeUpdater\Theme_Validator::URL, strtr($match[1], ['\\\\' => '\\']));
+    }
+
     public function testThemeMarkerIsOutsideThePrefixInterceptedByThePluginClient(): void
     {
         self::assertStringStartsNotWith(\WAWP\Updater\Config::ENDPOINT . '/v1/download/', \WAWP\ThemeUpdater\Config::PACKAGE_MARKER);

@@ -92,11 +92,11 @@ if ($isTheme) {
             $errors[] = 'En-tête Theme URI invalide (adresse http ou https, sans espace, guillemet, chevron, barre oblique inverse ni caractère de contrôle, 2048 caractères au plus).';
         }
         $requires = $header($style, 'Requires at least');
-        if ($requires === null || preg_match('/^\d+(?:\.\d+){0,2}\z/', $requires) !== 1 || version_compare($requires, '6.1', '<')) {
+        if ($requires === null || preg_match('/^\d{1,5}(?:\.\d{1,5}){1,3}\z/', $requires) !== 1 || version_compare($requires, '6.1', '<')) {
             $errors[] = 'En-tête Requires at least absent ou inférieur à 6.1 (filtre update_themes_{hôte} de WordPress).';
         }
         $requiresPhp = $header($style, 'Requires PHP');
-        if ($requiresPhp === null || preg_match('/^\d+(?:\.\d+){0,2}\z/', $requiresPhp) !== 1) {
+        if ($requiresPhp === null || preg_match('/^\d{1,5}(?:\.\d{1,5}){1,3}\z/', $requiresPhp) !== 1) {
             $errors[] = 'En-tête Requires PHP absent ou invalide.';
         }
         if ($header($style, 'Text Domain') !== $slug) {

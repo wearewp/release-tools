@@ -227,6 +227,23 @@ final class ThemeUpdaterTest extends TestCase
         self::assertSame(['https://updates.wearewp.pro/v1/download/jeton2'], $urls);
     }
 
+    public function testExceptionAfterTheDownloadDeletesTheTemporaryFile(): void
+    {
+        $zip = $this->zip;
+        WawpTestState::$download = static function () use ($zip): string {
+            copy($zip, $zip . '.dl');
+            // La lecture de style.css échoue une fois le fichier téléchargé et signé.
+            WawpTestState::$versions[self::STYLE] = new \RuntimeException('panne');
+
+            return $zip . '.dl';
+        };
+        $result = $this->updater()->filter_pre_download(false, self::MARKER, null, ['theme' => self::SLUG]);
+
+        self::assertInstanceOf(WP_Error::class, $result);
+        self::assertSame('wawp_theme_updater_error', $result->get_error_code());
+        self::assertFileDoesNotExist($this->zip . '.dl', 'le fichier temporaire ne doit pas rester sur le disque');
+    }
+
     public function testPreDownloadWorksWithBulkUpgradeContext(): void
     {
         // bulk_upgrade() (écran Mises à jour, AJAX, WP-CLI) ne passe que 'theme' et 'temp_backup'.
@@ -262,6 +279,7 @@ final class ThemeUpdaterTest extends TestCase
         $this->updater()->hooks();
 
         // Ordre réel sur un site : wawp-updater s'inscrit d'abord (plugins_loaded), à la même priorité 1.
+        self::assertCount(2, WawpTestState::$hooks['upgrader_pre_download'], 'wawp-updater et wawp-theme-updater sont tous deux inscrits');
         $reply = false;
         foreach (WawpTestState::$hooks['upgrader_pre_download'] as $callback) {
             $reply = $callback($reply, self::MARKER, null, ['theme' => self::SLUG, 'type' => 'theme', 'action' => 'update']);
