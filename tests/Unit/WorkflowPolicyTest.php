@@ -88,7 +88,7 @@ final class WorkflowPolicyTest extends TestCase
         $steps = self::steps($build);
 
         $main = $steps['Version minimale de wawp-updater exigée sur main'] ?? '';
-        foreach (['uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683', 'repository: wearewp/release-tools', 'ref: main', 'path: tools-main', 'sparse-checkout: config', 'persist-credentials: false'] as $needle) {
+        foreach (['uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1', 'repository: wearewp/release-tools', 'ref: main', 'path: tools-main', 'sparse-checkout: config', 'persist-credentials: false'] as $needle) {
             self::assertStringContainsString($needle, $main, $needle);
         }
         $checks = $steps['Contrôles avant publication'] ?? '';
