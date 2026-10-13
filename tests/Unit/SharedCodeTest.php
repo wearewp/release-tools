@@ -33,6 +33,35 @@ final class SharedCodeTest extends TestCase
         self::assertSame($plugin, str_replace('WAWP\ThemeUpdater', 'WAWP\Updater', $theme));
     }
 
+    /** @return array<string, array{string}> */
+    public static function sharedMethods(): array
+    {
+        return [
+            'read' => ['read'],
+            'call' => ['call'],
+            'header' => ['header'],
+        ];
+    }
+
+    /** Corps d'une méthode : de sa signature à l'accolade fermante de même indentation. */
+    private static function methodBody(string $source, string $method): string
+    {
+        $found = preg_match('/^\tprivate static function ' . $method . '\(.*?^\t}$/ms', $source, $match);
+        self::assertSame(1, $found, "méthode $method introuvable");
+
+        return $match[0];
+    }
+
+    /** Troisième copie partagée : les méthodes read(), call() et header() de Package. */
+    #[DataProvider('sharedMethods')]
+    public function testPackageHelperMethodBodiesAreIdenticalInBothUpdaters(string $method): void
+    {
+        $root = dirname(__DIR__, 2);
+        $plugin = self::methodBody((string) file_get_contents("$root/wawp-updater/src/class-package.php"), $method);
+        $theme = self::methodBody((string) file_get_contents("$root/wawp-theme-updater/src/class-package.php"), $method);
+        self::assertSame($plugin, $theme);
+    }
+
     public function testSameServerAndSameSigningKeys(): void
     {
         self::assertSame(\WAWP\Updater\Config::PUBLIC_KEYS, \WAWP\ThemeUpdater\Config::PUBLIC_KEYS);
