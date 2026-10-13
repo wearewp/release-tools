@@ -39,16 +39,32 @@ final class Updater {
 	private $public_keys;
 
 	/**
+	 * Pause en secondes avant la seconde demande de jeton frais.
+	 *
+	 * @var int
+	 */
+	private $retry_delay;
+
+	/**
+	 * Résultat de la dernière requête /v1/check faite par offers(), ou null si aucune requête n'a été faite.
+	 *
+	 * @var array{status: int, error: ?string}|null
+	 */
+	private $last_check = null;
+
+	/**
 	 * @param string   $stylesheet  Nom du dossier du thème actif.
 	 * @param string   $dir         Chemin du dossier du thème actif.
 	 * @param Client   $client      Client HTTP.
 	 * @param string[] $public_keys Clés publiques Ed25519 en base64.
+	 * @param int      $retry_delay Pause en secondes avant la seconde demande de jeton frais (0 dans les tests).
 	 */
-	public function __construct( string $stylesheet, string $dir, Client $client, array $public_keys ) {
+	public function __construct( string $stylesheet, string $dir, Client $client, array $public_keys, int $retry_delay = Config::RETRY_DELAY ) {
 		$this->stylesheet  = $stylesheet;
 		$this->dir         = $dir;
 		$this->client      = $client;
 		$this->public_keys = $public_keys;
+		$this->retry_delay = $retry_delay;
 	}
 
 	/**
@@ -140,8 +156,18 @@ final class Updater {
 				return new \WP_Error( 'wawp_theme_unknown_package', __( 'Paquet de thème WeAre[WP] inconnu : mise à jour annulée.', 'wawp-theme-updater' ) );
 			}
 			$offers = $this->offers( true );
+			// Une seule seconde tentative après une courte pause (incident réseau passager), jamais après un refus de licence.
+			if ( ! isset( $offers[ $slug ] ) && null !== $this->last_check && 401 !== $this->last_check['status'] ) {
+				if ( $this->retry_delay > 0 ) {
+					sleep( $this->retry_delay );
+				}
+				$offers = $this->offers( true );
+			}
 			if ( ! isset( $offers[ $slug ] ) ) {
-				return new \WP_Error( 'wawp_theme_token_unavailable', __( 'Mise à jour du thème WeAre[WP] indisponible : licence refusée ou serveur injoignable.', 'wawp-theme-updater' ) );
+				$cause = null === $this->last_check ? __( 'configuration locale incomplète', 'wawp-theme-updater' ) : ( $this->last_check['error'] ?? __( 'aucune offre pour ce thème', 'wawp-theme-updater' ) );
+
+				/* translators: %s: cause de l'échec de la dernière demande au serveur (par exemple « HTTP 503 »). */
+				return new \WP_Error( 'wawp_theme_token_unavailable', sprintf( __( 'Mise à jour du thème WeAre[WP] indisponible (%s) : licence refusée, réponse invalide ou serveur injoignable.', 'wawp-theme-updater' ), $cause ) );
 			}
 			$offer = $offers[ $slug ];
 			$file  = download_url( $offer['package'], Config::DOWNLOAD_TIMEOUT );
@@ -231,9 +257,10 @@ final class Updater {
 	 * @return array<string, array{version: string, requires: ?string, requires_php: ?string, url: string, package: string, signature: string}>
 	 */
 	private function offers( bool $fresh ): array {
-		$key       = $this->key();
-		$slug      = $this->slug();
-		$installed = $this->installed();
+		$this->last_check = null;
+		$key              = $this->key();
+		$slug             = $this->slug();
+		$installed        = $this->installed();
 		if ( null === $key || null === $slug || null === $installed ) {
 			return array();
 		}
@@ -250,8 +277,12 @@ final class Updater {
 			}
 		}
 
-		$result = $this->client->check( $key, $site, array( $slug => $installed ) );
-		$offers = $result['offers'];
+		$result           = $this->client->check( $key, $site, array( $slug => $installed ) );
+		$offers           = $result['offers'];
+		$this->last_check = array(
+			'status' => $result['status'],
+			'error'  => $result['error'],
+		);
 		set_site_transient(
 			Config::CACHE_KEY,
 			array(

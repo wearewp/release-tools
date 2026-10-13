@@ -26,7 +26,8 @@ final class ThemeValidatorTest extends TestCase
 
     public function testConfigValues(): void
     {
-        self::assertSame('1.0.0', Config::VERSION);
+        self::assertSame('1.0.1', Config::VERSION);
+        self::assertSame(1, Config::RETRY_DELAY);
         self::assertSame('updates.wearewp.pro', Config::HOST);
         self::assertSame('https://updates.wearewp.pro', Config::ENDPOINT);
         self::assertSame('https://updates.wearewp.pro/v1/theme-update/', Config::PACKAGE_MARKER);
