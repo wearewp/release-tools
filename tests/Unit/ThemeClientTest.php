@@ -39,10 +39,10 @@ final class ThemeClientTest extends TestCase
         self::assertSame(0, $args['redirection']);
         self::assertTrue($args['sslverify']);
         self::assertSame(
-            ['site' => 'https://client.fr', 'themes' => ['wawp-demo-theme' => '1.3.0'], 'wp' => '6.8.1', 'php' => PHP_VERSION, 'client' => '1.0.0'],
+            ['site' => 'https://client.fr', 'themes' => ['wawp-demo-theme' => '1.3.0'], 'wp' => '6.8.1', 'php' => PHP_VERSION, 'client' => '1.0.1'],
             json_decode($args['body'], true)
         );
-        self::assertStringStartsWith('wawp-theme-updater/1.0.0; ', $args['user-agent']);
+        self::assertStringStartsWith('wawp-theme-updater/1.0.1; ', $args['user-agent']);
         self::assertStringNotContainsString(self::KEY, $args['user-agent']);
     }
 
@@ -61,5 +61,30 @@ final class ThemeClientTest extends TestCase
             self::assertSame($status, $result['status'], $label);
             self::assertNull($result['offers'], $label);
         }
+    }
+
+    public function testErrorDescribesTheCauseWithoutTheLicenceKey(): void
+    {
+        $cases = [
+            'succès' => [static fn (): array => Http::response(200, Http::theme_body([])), null],
+            'réseau' => [static fn () => new WP_Error('http_request_failed', 'cURL error 6: Could not resolve host'), 'réseau : http_request_failed cURL error 6: Could not resolve host'],
+            'licence refusée' => [static fn (): array => Http::response(401, '{"status":"unauthorized"}'), 'HTTP 401'],
+            'serveur indisponible' => [static fn (): array => Http::response(503, '{"status":"unavailable"}'), 'HTTP 503'],
+            'réponse invalide' => [static fn (): array => Http::response(200, 'pas du JSON'), 'réponse invalide'],
+            'réponse de plugins' => [static fn (): array => Http::response(200, '{"plugins":{}}'), 'réponse invalide'],
+            'clé dans le message réseau' => [static fn () => new WP_Error('http_request_failed', "Authorization: Bearer " . self::KEY . "\n<b>"), 'réseau : http_request_failed Authorization: Bearer ***  b '],
+        ];
+        foreach ($cases as $label => [$http, $error]) {
+            WawpTestState::$http = $http;
+            $result = (new Client())->check(self::KEY, 'https://client.fr', ['wawp-demo-theme' => '1.3.0']);
+            self::assertSame($error, $result['error'], $label);
+        }
+
+        WawpTestState::$http = static fn () => new WP_Error('http_request_failed', 'cURL error 28: é' . str_repeat('x', 300) . self::KEY);
+        $error = (string) (new Client())->check(self::KEY, 'https://client.fr', ['wawp-demo-theme' => '1.3.0'])['error'];
+        self::assertStringStartsWith('réseau : http_request_failed cURL error 28: éxxx', $error);
+        self::assertSame(200, mb_strlen($error) - mb_strlen('réseau : http_request_failed '), 'message tronqué à 200 caractères');
+        self::assertTrue(mb_check_encoding($error, 'UTF-8'));
+        self::assertStringNotContainsString(self::KEY, $error);
     }
 }

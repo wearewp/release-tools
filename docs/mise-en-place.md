@@ -122,7 +122,7 @@ Le thème est un thème FSE autonome (pas de thème parent, pas d'en-tête `Temp
    ```
 3. Dans `style.css` : `Update URI: https://updates.wearewp.pro`, `Requires at least: 6.1` (ou plus), `Requires PHP`, `Text Domain: <slug>`, `Version` à la prochaine version mineure. `Theme URI` est facultatif, mais s'il est vide le lien « Voir les détails de la version » de WordPress ne mène nulle part d'utile : renseigner `Theme URI: https://www.wearewp.pro/` (recommandé).
 4. Créer `.distignore` avec des motifs racine ancrés par `/` (`/.git`, `/.github`, `/node_modules`, `/src`…).
-5. Contrôler localement : `php <release-tools>/scripts/check-headers.php --type=theme <thème> <slug> v<version> 1.0.0` → `Contrôles réussis`.
+5. Contrôler localement : `php <release-tools>/scripts/check-headers.php --type=theme <thème> <slug> v<version> 1.0.1` → `Contrôles réussis`.
 6. Lancer, dans Git Bash, depuis le dossier de release-tools : `bash bin/setup-repo.sh wearewp/<slug> <chemin-local-du-thème>` (`Type détecté : theme.`), puis commiter `.github/workflows/release.yml`.
 7. Ajouter le slug à la liste `themes` de la licence du site (`bin/new-key.php --theme=<slug>` pour une nouvelle licence, ou édition du registre puis `bin/check-licences.php`).
 8. Publier comme un plugin (section 7, sans `readme.txt`), puis, après sauvegarde du site, installer une fois le zip publié à la main (Apparence › Thèmes › Ajouter › Téléverser, remplacer le thème actif). Les versions suivantes passent par les mises à jour de WordPress.

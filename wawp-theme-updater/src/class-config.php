@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 final class Config {
 
 	/** Version de la bibliothèque. */
-	const VERSION = '1.0.0';
+	const VERSION = '1.0.1';
 
 	/** Hôte de l'en-tête Update URI des thèmes WeAre[WP]. */
 	const HOST = 'updates.wearewp.pro';
@@ -49,6 +49,9 @@ final class Config {
 
 	/** Délai réseau des appels à l'API. */
 	const TIMEOUT = 10;
+
+	/** Pause (en secondes) avant la seconde et dernière demande de jeton frais au téléchargement. */
+	const RETRY_DELAY = 1;
 
 	/** Délai de téléchargement d'un paquet. */
 	const DOWNLOAD_TIMEOUT = 300;
