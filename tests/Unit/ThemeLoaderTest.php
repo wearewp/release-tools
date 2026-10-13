@@ -95,7 +95,22 @@ final class ThemeLoaderTest extends TestCase
 
     public function testLoaderLeavesNoVariableInGlobalScope(): void
     {
-        $out = $this->runPhp(self::load($this->theme) . 'echo count(array_filter(array_keys(get_defined_vars()), static fn ($name) => str_starts_with((string) $name, "wawp")));');
-        self::assertSame('0', $out);
+        $out = $this->runPhp(
+            self::load($this->theme) . self::register($this->theme)
+            . 'echo count(array_filter(array_keys(get_defined_vars()), static fn ($name) => str_starts_with((string) $name, "wawp")));'
+        );
+        self::assertSame('start:wawp-demo-theme:wawp-demo-theme;0', $out, 'chargement et register() ne laissent aucune variable globale');
+    }
+
+    public function testEmptyDirectoryIsIgnored(): void
+    {
+        $cwd = (string) getcwd();
+        chdir($this->theme);
+        try {
+            $out = $this->runPhp(self::load($this->theme) . self::register('') . 'echo "fin";');
+        } finally {
+            chdir($cwd);
+        }
+        self::assertSame('fin', $out, "'' ne doit pas se résoudre au dossier courant");
     }
 }

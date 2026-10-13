@@ -26,8 +26,10 @@ if ( ! function_exists( __NAMESPACE__ . '\register' ) ) {
 	 * @return void
 	 */
 	function register( $theme_dir ) {
+		static $registered = false;
+
 		try {
-			if ( ! empty( $GLOBALS['wawp_theme_updater_registered'] ) || ! is_string( $theme_dir ) || ! function_exists( 'get_stylesheet_directory' ) || ! function_exists( 'get_stylesheet' ) ) {
+			if ( $registered || ! is_string( $theme_dir ) || '' === $theme_dir || ! function_exists( 'get_stylesheet_directory' ) || ! function_exists( 'get_stylesheet' ) ) {
 				return;
 			}
 			$dir    = realpath( $theme_dir );
@@ -35,7 +37,7 @@ if ( ! function_exists( __NAMESPACE__ . '\register' ) ) {
 			if ( false === $dir || false === $active || $dir !== $active || ! is_readable( __DIR__ . '/bootstrap.php' ) ) {
 				return;
 			}
-			$GLOBALS['wawp_theme_updater_registered'] = true;
+			$registered = true;
 
 			$start = require __DIR__ . '/bootstrap.php';
 			if ( is_callable( $start ) ) {
