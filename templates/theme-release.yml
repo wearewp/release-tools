@@ -10,5 +10,5 @@ jobs:
   release:
     permissions:
       contents: write
-    uses: wearewp/release-tools/.github/workflows/theme-release.yml@v1.1
+    uses: wearewp/release-tools/.github/workflows/theme-release.yml@v1.2
     secrets: inherit

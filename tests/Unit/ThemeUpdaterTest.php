@@ -76,7 +76,86 @@ final class ThemeUpdaterTest extends TestCase
     /** @param list<string>|null $keys */
     private function updater(?array $keys = null): Updater
     {
-        return new Updater(self::SLUG, self::DIR, new Client(), $keys ?? [$this->pair['public']]);
+        // Pause nulle avant la seconde tentative du jeton frais : les tests n'attendent pas.
+        return new Updater(self::SLUG, self::DIR, new Client(), $keys ?? [$this->pair['public']], 0);
+    }
+
+    /**
+     * Réponses successives de /v1/check : null pour une erreur réseau, sinon [statut, corps] ; 'offre' pour l'offre signée.
+     *
+     * @param list<array{int, string}|string|null> $answers
+     */
+    private function answers(array $answers): void
+    {
+        $signature = Keys::sign_file($this->zip, $this->pair['secret']);
+        WawpTestState::$http = static function () use (&$answers, $signature) {
+            $answer = array_shift($answers);
+            if (null === $answer) {
+                return new WP_Error('http_request_failed', 'cURL error 28: Operation timed out');
+            }
+            if ('offre' === $answer) {
+                return Http::response(200, Http::theme_body([self::SLUG => Http::theme_offer(self::SLUG, '1.4.0', $signature, 'jeton-frais')]));
+            }
+
+            return Http::response($answer[0], $answer[1]);
+        };
+    }
+
+    public function testFreshTokenIsRequestedASecondTimeAfterANetworkFailure(): void
+    {
+        $this->answers([null, 'offre']);
+        $path = $this->updater()->filter_pre_download(false, self::MARKER, null, ['theme' => self::SLUG]);
+
+        self::assertSame($this->zip . '.dl', $path, 'fichier vérifié après la seconde tentative');
+        self::assertCount(2, WawpTestState::$requests);
+        self::assertSame('https://updates.wearewp.pro/v1/check', WawpTestState::$requests[1][1]);
+        $cache = WawpTestState::$transients['wawp_theme_updater_check'];
+        self::assertSame(43200, $cache['ttl'], 'la seconde tentative réussie écrit le cache de succès');
+        self::assertFalse($cache['value']['denied']);
+    }
+
+    public function testTwoFailuresReportTheCauseOfTheSecondAttempt(): void
+    {
+        $this->answers([null, [503, '{"status":"unavailable"}'], 'offre']);
+        $result = $this->updater()->filter_pre_download(false, self::MARKER, null, ['theme' => self::SLUG]);
+
+        self::assertInstanceOf(WP_Error::class, $result);
+        self::assertSame('wawp_theme_token_unavailable', $result->get_error_code());
+        self::assertSame('Mise à jour du thème WeAre[WP] indisponible (HTTP 503) : licence refusée, réponse invalide ou serveur injoignable.', $result->get_error_message());
+        self::assertCount(2, WawpTestState::$requests, 'jamais plus de deux requêtes /v1/check par téléchargement');
+        self::assertSame(3600, WawpTestState::$transients['wawp_theme_updater_check']['ttl']);
+        self::assertStringNotContainsString(self::KEY, $result->get_error_message());
+    }
+
+    public function testServerErrorThenNetworkFailureReportsTheNetworkCause(): void
+    {
+        $this->answers([[503, '{"status":"unavailable"}'], null, 'offre']);
+        $result = $this->updater()->filter_pre_download(false, self::MARKER, null, ['theme' => self::SLUG]);
+
+        self::assertStringContainsString('(réseau : http_request_failed cURL error 28: Operation timed out)', $result->get_error_message());
+        self::assertStringNotContainsString(self::KEY, $result->get_error_message());
+        self::assertCount(2, WawpTestState::$requests, 'jamais plus de deux requêtes /v1/check par téléchargement');
+    }
+
+    public function testRefusedLicenceIsNotRetried(): void
+    {
+        $this->answers([[401, '{"status":"unauthorized"}'], 'offre']);
+        $result = $this->updater()->filter_pre_download(false, self::MARKER, null, ['theme' => self::SLUG]);
+
+        self::assertInstanceOf(WP_Error::class, $result);
+        self::assertSame('wawp_theme_token_unavailable', $result->get_error_code());
+        self::assertStringContainsString('(HTTP 401)', $result->get_error_message());
+        self::assertCount(1, WawpTestState::$requests, 'refus de licence : pas de seconde tentative');
+        self::assertTrue(WawpTestState::$transients['wawp_theme_updater_check']['value']['denied']);
+    }
+
+    public function testInvalidAnswerIsReportedAsSuch(): void
+    {
+        $this->answers([[200, 'pas du JSON'], [200, '{"plugins":{}}']]);
+        $result = $this->updater()->filter_pre_download(false, self::MARKER, null, ['theme' => self::SLUG]);
+
+        self::assertSame('Mise à jour du thème WeAre[WP] indisponible (réponse invalide) : licence refusée, réponse invalide ou serveur injoignable.', $result->get_error_message());
+        self::assertCount(2, WawpTestState::$requests);
     }
 
     private function notice(Updater $updater, string $screen): string
