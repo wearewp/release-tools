@@ -26,6 +26,8 @@ final class WawpTestState
     /** @var array<string, string> */
     public static array $versions = [];
     public static bool $multisite = false;
+    /** @var array<string, array<string, string>> chemin de fichier vers en-têtes (hors Version) */
+    public static array $headers = [];
 
     public static function reset(): void
     {
@@ -40,6 +42,7 @@ final class WawpTestState
         self::$screen = null;
         self::$versions = [];
         self::$multisite = false;
+        self::$headers = [];
     }
 }
 
@@ -86,7 +89,12 @@ function plugin_basename(string $file): string
 /** @param array<string, string> $headers @return array<string, string> */
 function get_file_data(string $file, array $headers): array
 {
-    return ['Version' => WawpTestState::$versions[$file] ?? ''];
+    $data = [];
+    foreach ($headers as $field => $name) {
+        $data[$field] = $name === 'Version' ? (WawpTestState::$versions[$file] ?? '') : (WawpTestState::$headers[$file][$name] ?? '');
+    }
+
+    return $data;
 }
 
 function get_site_transient(string $key): mixed
@@ -218,6 +226,11 @@ function __(string $text, string $domain = 'default'): string
 }
 
 function esc_html__(string $text, string $domain = 'default'): string
+{
+    return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+}
+
+function esc_html(string $text): string
 {
     return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
 }
