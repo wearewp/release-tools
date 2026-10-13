@@ -69,7 +69,7 @@ git push origin v1
 
 Le dépôt doit appartenir à l'organisation `wearewp`, être privé et porter le nom du slug du plugin.
 
-1. Copier `wawp-updater/` (version taguée `v1`) à la racine du plugin.
+1. Copier `wawp-updater/` (version taguée `v1.4`) à la racine du plugin : `git -C <release-tools> archive v1.4 wawp-updater | tar -x -C <plugin>`.
 2. Dans le fichier principal `<slug>.php` : ajouter l'en-tête `Update URI: https://updates.wearewp.pro` et, après le contrôle `ABSPATH` :
    ```php
    require __DIR__ . '/wawp-updater/load.php';
@@ -114,7 +114,7 @@ Le ruleset de l'étape 5 protège aussi ce tag (motif `refs/tags/v*`) : il ne po
 
 Le thème est un thème FSE autonome (pas de thème parent, pas d'en-tête `Template`), actif sur un seul site. Le dépôt appartient à l'organisation `wearewp`, est privé et porte le nom du slug du thème, qui est aussi le nom de son dossier et son `Text Domain`.
 
-1. Copier `wawp-theme-updater/` (version taguée `v1.2`) à la racine du thème : `git -C <release-tools> archive v1.2 wawp-theme-updater | tar -x -C <thème>`.
+1. Copier `wawp-theme-updater/` (version taguée `v1.4`) à la racine du thème : `git -C <release-tools> archive v1.4 wawp-theme-updater | tar -x -C <thème>`.
 2. Dans `functions.php`, après le contrôle `ABSPATH` :
    ```php
    require __DIR__ . '/wawp-theme-updater/load.php';
@@ -128,6 +128,20 @@ Le thème est un thème FSE autonome (pas de thème parent, pas d'en-tête `Temp
 8. Publier comme un plugin (section 7, sans `readme.txt`), puis, après sauvegarde du site, installer une fois le zip publié à la main (Apparence › Thèmes › Ajouter › Téléverser, remplacer le thème actif). Les versions suivantes passent par les mises à jour de WordPress.
 
 Le client des thèmes ne place jamais l'adresse de téléchargement dans le cache de WordPress, mais un marqueur `https://updates.wearewp.pro/v1/theme-update/<slug>` : `wawp-updater` 1.0.0, embarqué dans les plugins, refuse toute adresse `/v1/download/` hors d'une mise à jour de plugin. Une rotation de clé de signature (section 8) concerne aussi `wawp-theme-updater/src/class-config.php` (même `PUBLIC_KEYS`) et `config/min-theme-updater-version.txt`.
+
+## 11. Tag `v1.4` de release-tools (une seule fois)
+
+Le tag `v1.4` aligne tout sur `actions/checkout` v7 (Node.js 24) : `plugin-release.yml` et `theme-release.yml` y utilisent `tools-ref: v1.4` par défaut, et les modèles `templates/release.yml` et `templates/theme-release.yml` appellent `@v1.4`. Les nouveaux dépôts (plugins comme thèmes) utilisent donc `@v1.4` et copient `wawp-updater/` ou `wawp-theme-updater/` depuis ce tag. Après fusion sur `main` de la branche correspondante, depuis un clone de release-tools, dans Git Bash (`gh` authentifié comme à l'étape 5) :
+
+```
+git checkout main && git pull
+git tag v1.4
+git push origin v1.4
+```
+
+Le ruleset de l'étape 5 protège aussi ce tag (motif `refs/tags/v*`).
+
+Les dépôts existants restent sur `@v1` (plugins) ou `@v1.2` (thèmes) et continuent de fonctionner sans changement. Ils peuvent passer à `@v1.4` à leur prochaine version, en modifiant une seule ligne de `.github/workflows/release.yml` (`uses: …@v1.4`) ; le code embarqué `wawp-updater/` ou `wawp-theme-updater/` n'a pas à être recopié.
 
 ## Limite connue
 
