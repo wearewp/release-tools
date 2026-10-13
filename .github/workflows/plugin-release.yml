@@ -24,13 +24,13 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
     steps:
       - name: Code du plugin
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: plugin
           persist-credentials: false
 
       - name: Outils de publication
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: wearewp/release-tools
           ref: ${{ inputs.tools-ref }}
@@ -39,7 +39,7 @@ jobs:
 
       # Un relèvement de la version minimale sur main s'applique même aux appels épinglés sur un ancien tag.
       - name: Version minimale de wawp-updater exigée sur main
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: wearewp/release-tools
           ref: main
@@ -106,7 +106,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Outils de publication
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: wearewp/release-tools
           ref: ${{ inputs.tools-ref }}
