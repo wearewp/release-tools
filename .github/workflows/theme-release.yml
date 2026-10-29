@@ -6,7 +6,7 @@ on:
       tools-ref:
         description: Version de release-tools utilisée pour les scripts (doit correspondre à la version du workflow).
         type: string
-        default: v1.4
+        default: v1.5
 
 permissions:
   contents: read

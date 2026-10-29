@@ -24,7 +24,19 @@ if [ ! -f "$zip" ] || [ ! -f "$sig" ]; then
     exit 1
 fi
 
-lftp -c "set cmd:fail-exit true; set ftp:ssl-force true; set ftp:ssl-protect-data true; set ssl:verify-certificate true; set net:max-retries 2; set net:timeout 30; \
+# Liste de confiance : magasin du système, plus les intermédiaires que le serveur
+# FTP n'envoie pas (config/ftps-intermediates.pem). La vérification reste active.
+system_ca=/etc/ssl/certs/ca-certificates.crt
+intermediates="$(dirname -- "${BASH_SOURCE[0]}")/../config/ftps-intermediates.pem"
+if [ ! -f "$system_ca" ] || [ ! -f "$intermediates" ]; then
+    echo "Certificats de confiance absents : $system_ca ou $intermediates" >&2
+    exit 1
+fi
+ca_file="$(mktemp)"
+trap 'rm -f -- "$ca_file"' EXIT
+cat -- "$system_ca" "$intermediates" > "$ca_file"
+
+lftp -c "set cmd:fail-exit true; set ftp:ssl-force true; set ftp:ssl-protect-data true; set ssl:verify-certificate true; set ssl:ca-file \"$ca_file\"; set net:max-retries 2; set net:timeout 30; \
 open --env-password -u \"$FTP_USER\" \"ftp://$FTP_HOST\"; \
 put \"$zip\" -o \"$name.part\"; mv \"$name.part\" \"$name\"; \
 put \"$sig\" -o \"$name.sig.part\"; mv \"$name.sig.part\" \"$name.sig\""
