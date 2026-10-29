@@ -137,7 +137,7 @@ final class WorkflowPolicyTest extends TestCase
     {
         foreach (['plugin-release.yml', 'theme-release.yml'] as $name) {
             $yaml = self::file('.github/workflows/' . $name);
-            self::assertMatchesRegularExpression('/tools-ref:\n(?: {8}.*\n)*? {8}default: v1\.4\n/', $yaml, $name);
+            self::assertMatchesRegularExpression('/tools-ref:\n(?: {8}.*\n)*? {8}default: v1\.5\n/', $yaml, $name);
         }
     }
 
@@ -146,7 +146,7 @@ final class WorkflowPolicyTest extends TestCase
         $yaml = self::file('templates/release.yml');
         self::assertStringContainsString("tags: ['v*.*.*']", $yaml);
         self::assertStringContainsString('permissions: {}', $yaml);
-        self::assertStringContainsString('uses: wearewp/release-tools/.github/workflows/plugin-release.yml@v1.4', $yaml);
+        self::assertStringContainsString('uses: wearewp/release-tools/.github/workflows/plugin-release.yml@v1.5', $yaml);
         self::assertStringContainsString('secrets: inherit', $yaml);
     }
 
@@ -160,6 +160,18 @@ final class WorkflowPolicyTest extends TestCase
         self::assertStringContainsString('lftp -c "set cmd:fail-exit true;', $script, 'lftp s\'arrête à la première commande en échec');
         [$code, , $err] = Cli::run(['bash', '-n', 'scripts/upload-ftps.sh']);
         self::assertSame(0, $code, $err);
+    }
+
+    public function testUploadScriptTrustsTheSystemStorePlusTheMissingIntermediates(): void
+    {
+        $script = self::file('scripts/upload-ftps.sh');
+        self::assertStringContainsString('/etc/ssl/certs/ca-certificates.crt', $script, 'magasin du système conservé');
+        self::assertStringContainsString('config/ftps-intermediates.pem', $script);
+        self::assertStringContainsString('set ssl:ca-file \"$ca_file\";', $script);
+        self::assertLessThan((int) strpos($script, 'lftp -c'), (int) strpos($script, 'Certificats de confiance absents'));
+        $pem = self::file('config/ftps-intermediates.pem');
+        self::assertSame(2, substr_count($pem, '-----BEGIN CERTIFICATE-----'), 'YR2 et Root YR');
+        self::assertStringNotContainsString('PRIVATE KEY', $pem);
     }
 
     public function testUploadScriptValidatesThePackageNameBeforeLftp(): void
@@ -188,7 +200,7 @@ final class WorkflowPolicyTest extends TestCase
         self::assertStringContainsString("permissions:
   contents: read
 ", $yaml);
-        self::assertStringContainsString("        default: v1.4
+        self::assertStringContainsString("        default: v1.5
 ", $yaml);
         self::assertSame(2, substr_count($yaml, 'overwrite: true'));
         self::assertStringNotContainsString('--clobber', $yaml);
@@ -225,8 +237,8 @@ final class WorkflowPolicyTest extends TestCase
         $yaml = self::file('templates/theme-release.yml');
         self::assertStringContainsString("tags: ['v*.*.*']", $yaml);
         self::assertStringContainsString('permissions: {}', $yaml);
-        self::assertStringContainsString('uses: wearewp/release-tools/.github/workflows/theme-release.yml@v1.4', $yaml);
+        self::assertStringContainsString('uses: wearewp/release-tools/.github/workflows/theme-release.yml@v1.5', $yaml);
         self::assertStringContainsString('secrets: inherit', $yaml);
-        self::assertStringContainsString('uses: wearewp/release-tools/.github/workflows/plugin-release.yml@v1.4', self::file('templates/release.yml'), 'plugins et thèmes sur le même tag');
+        self::assertStringContainsString('uses: wearewp/release-tools/.github/workflows/plugin-release.yml@v1.5', self::file('templates/release.yml'), 'plugins et thèmes sur le même tag');
     }
 }
