@@ -69,7 +69,7 @@ git push origin v1
 
 Le dépôt doit appartenir à l'organisation `wearewp`, être privé et porter le nom du slug du plugin.
 
-1. Copier `wawp-updater/` (version taguée `v1.4`) à la racine du plugin : `git -C <release-tools> archive v1.4 wawp-updater | tar -x -C <plugin>`.
+1. Copier `wawp-updater/` (version taguée `v1.5`) à la racine du plugin : `git -C <release-tools> archive v1.5 wawp-updater | tar -x -C <plugin>`.
 2. Dans le fichier principal `<slug>.php` : ajouter l'en-tête `Update URI: https://updates.wearewp.pro` et, après le contrôle `ABSPATH` :
    ```php
    require __DIR__ . '/wawp-updater/load.php';
@@ -114,7 +114,7 @@ Le ruleset de l'étape 5 protège aussi ce tag (motif `refs/tags/v*`) : il ne po
 
 Le thème est un thème FSE autonome (pas de thème parent, pas d'en-tête `Template`), actif sur un seul site. Le dépôt appartient à l'organisation `wearewp`, est privé et porte le nom du slug du thème, qui est aussi le nom de son dossier et son `Text Domain`.
 
-1. Copier `wawp-theme-updater/` (version taguée `v1.4`) à la racine du thème : `git -C <release-tools> archive v1.4 wawp-theme-updater | tar -x -C <thème>`.
+1. Copier `wawp-theme-updater/` (version taguée `v1.5`) à la racine du thème : `git -C <release-tools> archive v1.5 wawp-theme-updater | tar -x -C <thème>`.
 2. Dans `functions.php`, après le contrôle `ABSPATH` :
    ```php
    require __DIR__ . '/wawp-theme-updater/load.php';
@@ -142,6 +142,14 @@ git push origin v1.4
 Le ruleset de l'étape 5 protège aussi ce tag (motif `refs/tags/v*`).
 
 Les dépôts existants restent sur `@v1` (plugins) ou `@v1.2` (thèmes) et continuent de fonctionner sans changement. Ils peuvent passer à `@v1.4` à leur prochaine version, en modifiant une seule ligne de `.github/workflows/release.yml` (`uses: …@v1.4`) ; le code embarqué `wawp-updater/` ou `wawp-theme-updater/` n'a pas à être recopié.
+
+## 12. Tag `v1.5` de release-tools : chaîne FTPS complétée
+
+Depuis fin octobre 2026, le serveur FTP d'o2switch ne présente que son propre certificat, sans l'intermédiaire Let's Encrypt : l'envoi échoue avec « The certificate issuer is unknown ». `v1.5` ajoute à la liste de confiance de lftp, en plus du magasin du système, les intermédiaires de `config/ftps-intermediates.pem` (YR2 et Root YR, contre-signée par ISRG Root X1). La vérification du certificat et du nom d'hôte reste active.
+
+Tag et passage des dépôts : comme à la section 11, avec `v1.5`. Les dépôts passent à `@v1.5` en modifiant `uses: …@v1.4` dans `.github/workflows/release.yml`. Une publication déjà en échec sur `@v1.4` ne se rattrape pas en relançant le job (la relance réutilise le workflow du commit tagué, et les tags sont protégés) : publier une version corrective (`X.Y.Z+1`) après le passage à `@v1.5`.
+
+Si Let's Encrypt change d'intermédiaire avant qu'o2switch corrige sa chaîne, l'envoi échoue de nouveau : récupérer l'intermédiaire à l'adresse « CA Issuers » du certificat (`openssl s_client -starttls ftp -connect <FTP_HOST>:21 | openssl x509 -noout -ext authorityInfoAccess`), le contrôler avec `openssl verify`, puis l'ajouter au fichier.
 
 ## Limite connue
 
